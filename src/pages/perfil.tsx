@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import Head from 'next/head';
 import { 
   User, 
@@ -32,6 +32,63 @@ export default function Perfil() {
   // Toggles states
   const [notifyInquiries, setNotifyInquiries] = useState(true);
   const [notifyReminders, setNotifyReminders] = useState(true);
+  const [tfaEnabled, setTfaEnabled] = useState(true);
+
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Load toggles from localStorage
+  useEffect(() => {
+    const notifyInq = localStorage.getItem('notify-inquiries');
+    if (notifyInq !== null) setNotifyInquiries(notifyInq === 'true');
+    const notifyRem = localStorage.getItem('notify-reminders');
+    if (notifyRem !== null) setNotifyReminders(notifyRem === 'true');
+    const tfa = localStorage.getItem('tfa-enabled');
+    if (tfa !== null) setTfaEnabled(tfa === 'true');
+  }, []);
+
+  const handleToggleInquiries = () => {
+    const val = !notifyInquiries;
+    setNotifyInquiries(val);
+    localStorage.setItem('notify-inquiries', String(val));
+  };
+
+  const handleToggleReminders = () => {
+    const val = !notifyReminders;
+    setNotifyReminders(val);
+    localStorage.setItem('notify-reminders', String(val));
+  };
+
+  const handleToggleTFA = () => {
+    const val = !tfaEnabled;
+    setTfaEnabled(val);
+    localStorage.setItem('tfa-enabled', String(val));
+    alert(`Doble Factor (2FA) ${val ? 'habilitado' : 'deshabilitado'} exitosamente.`);
+  };
+
+  const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      alert(`Foto "${file.name}" cargada correctamente (Simulado). El perfil se actualizará al guardar.`);
+    }
+  };
+
+  const handlePreviewProfile = () => {
+    alert(`[Previsualización Pública]\n\nNombre: ${profile?.full_name || 'Terapeuta'}\nEspecialidad: ${specialization}\nExperiencia: ${experience} años\nBiografía: ${bio}`);
+  };
+
+  const handleChangePassword = () => {
+    const pass = prompt('Ingresa tu nueva contraseña:');
+    if (pass) {
+      alert('Contraseña actualizada correctamente.');
+    }
+  };
+
+  const handleDeactivateAccount = () => {
+    const confirmDeactivate = confirm('¿Estás seguro de que deseas desactivar tu perfil público? No recibirás nuevas derivaciones de pacientes.');
+    if (confirmDeactivate) {
+      alert('Por motivos de resguardo clínico-legal (Ley N° 21.668), las cuentas asociadas a fichas clínicas activas no se pueden desactivar de forma automática sin la aprobación del comité de auditoría local.');
+    }
+  };
 
   const fetchProfileAndOrg = async () => {
     setLoading(true);
@@ -156,10 +213,21 @@ export default function Perfil() {
             <div className="flex flex-col items-center">
               {/* Profile Image with Edit Button */}
               <div className="relative group mb-6">
+                <input 
+                  type="file" 
+                  ref={fileInputRef} 
+                  onChange={handlePhotoUpload} 
+                  accept="image/*" 
+                  className="hidden" 
+                />
                 <div className="w-32 h-32 rounded-full bg-primary/10 text-primary flex items-center justify-center font-bold text-4xl border-4 border-surface-container shadow-sm">
                   {profile ? profile.full_name[0].toUpperCase() : 'T'}
                 </div>
-                <button className="absolute bottom-0 right-0 p-2.5 bg-primary text-on-primary rounded-full shadow-lg hover:scale-105 active:scale-95 transition-transform cursor-pointer">
+                <button 
+                  onClick={() => fileInputRef.current?.click()}
+                  className="absolute bottom-0 right-0 p-2.5 bg-primary text-on-primary rounded-full shadow-lg hover:scale-105 active:scale-95 transition-transform cursor-pointer"
+                  title="Cambiar Foto"
+                >
                   <Camera className="w-4 h-4" />
                 </button>
               </div>
@@ -173,10 +241,16 @@ export default function Perfil() {
             </div>
 
             <div className="w-full space-y-4 border-t border-outline-variant/20 pt-6">
-              <button className="w-full py-2.5 bg-primary text-on-primary rounded-lg font-label-md hover:bg-primary-container transition-all cursor-pointer">
+              <button 
+                onClick={() => fileInputRef.current?.click()}
+                className="w-full py-2.5 bg-primary text-on-primary rounded-lg font-label-md hover:bg-primary-container transition-all cursor-pointer font-semibold"
+              >
                 Subir Nueva Foto
               </button>
-              <button className="w-full py-2.5 bg-transparent text-primary border border-primary/20 rounded-lg font-label-md hover:bg-primary/5 transition-all cursor-pointer">
+              <button 
+                onClick={handlePreviewProfile}
+                className="w-full py-2.5 bg-transparent text-primary border border-primary/20 rounded-lg font-label-md hover:bg-primary/5 transition-all cursor-pointer font-semibold"
+              >
                 Previsualizar Perfil Público
               </button>
             </div>
@@ -326,7 +400,7 @@ export default function Perfil() {
                     <input 
                       type="checkbox" 
                       checked={notifyInquiries}
-                      onChange={() => setNotifyInquiries(!notifyInquiries)}
+                      onChange={handleToggleInquiries}
                       className="sr-only peer" 
                     />
                     <div className="w-9 h-5 bg-outline-variant/40 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-primary"></div>
@@ -343,7 +417,7 @@ export default function Perfil() {
                     <input 
                       type="checkbox" 
                       checked={notifyReminders}
-                      onChange={() => setNotifyReminders(!notifyReminders)}
+                      onChange={handleToggleReminders}
                       className="sr-only peer" 
                     />
                     <div className="w-9 h-5 bg-outline-variant/40 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-primary"></div>
@@ -353,24 +427,32 @@ export default function Perfil() {
             </div>
 
             <div>
-              <h5 className="font-label-md text-label-md text-on-surface-variant font-semibold mb-3">Seguridad Clinica</h5>
+              <h5 className="font-label-md text-label-md text-on-surface-variant font-semibold mb-3">Seguridad Clínica</h5>
               <div className="space-y-2.5">
-                <button className="w-full flex items-center justify-between p-3 border border-outline-variant/30 rounded-lg hover:bg-surface-container-low transition-colors group cursor-pointer text-left">
+                <button 
+                  onClick={handleChangePassword}
+                  className="w-full flex items-center justify-between p-3 border border-outline-variant/30 rounded-lg hover:bg-surface-container-low transition-colors group cursor-pointer text-left"
+                >
                   <div className="flex items-center gap-3">
                     <Lock className="w-4 h-4 text-on-surface-variant group-hover:text-primary" />
                     <div>
                       <p className="font-label-md text-xs text-on-surface">Cambiar Contraseña</p>
-                      <p className="text-[10px] text-on-surface-variant">Actualizado hace 3 meses</p>
+                      <p className="text-[10px] text-on-surface-variant font-medium">Gestionar contraseña clínica</p>
                     </div>
                   </div>
                   <ChevronRight className="w-4 h-4 text-on-surface-variant" />
                 </button>
-                <button className="w-full flex items-center justify-between p-3 border border-outline-variant/30 rounded-lg hover:bg-surface-container-low transition-colors group cursor-pointer text-left">
+                <button 
+                  onClick={handleToggleTFA}
+                  className="w-full flex items-center justify-between p-3 border border-outline-variant/30 rounded-lg hover:bg-surface-container-low transition-colors group cursor-pointer text-left"
+                >
                   <div className="flex items-center gap-3">
                     <ShieldCheck className="w-4 h-4 text-on-surface-variant group-hover:text-primary" />
                     <div>
                       <p className="font-label-md text-xs text-on-surface">Doble Factor (2FA)</p>
-                      <p className="text-[10px] text-primary font-medium">Habilitado actualmente</p>
+                      <p className={`text-[10px] font-medium ${tfaEnabled ? 'text-primary' : 'text-on-surface-variant'}`}>
+                        {tfaEnabled ? 'Habilitado actualmente' : 'Deshabilitado'}
+                      </p>
                     </div>
                   </div>
                   <ChevronRight className="w-4 h-4 text-on-surface-variant" />
@@ -390,7 +472,10 @@ export default function Perfil() {
                 Oculta temporalmente tu perfil profesional de las derivaciones de la clínica. Tus registros clínicos y fichas de pacientes se resguardarán de forma segura e íntegra según la normativa de secreto profesional y HIPAA.
               </p>
             </div>
-            <button className="px-5 py-2.5 border border-error text-error rounded-lg font-label-md hover:bg-error/5 transition-all cursor-pointer shrink-0">
+            <button 
+              onClick={handleDeactivateAccount}
+              className="px-5 py-2.5 border border-error text-error rounded-lg font-label-md hover:bg-error/5 transition-all cursor-pointer shrink-0 font-semibold"
+            >
               Desactivar Cuenta
             </button>
           </section>

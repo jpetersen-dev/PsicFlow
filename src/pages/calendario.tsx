@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import Head from 'next/head';
 import Link from 'next/link';
 import { 
@@ -38,6 +38,15 @@ export default function Calendario() {
   ]);
   const [newReminderText, setNewReminderText] = useState('');
   const [quickNotes, setQuickNotes] = useState('');
+
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleFileAttach = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setQuickNotes(prev => prev + `\n[Archivo adjunto: ${file.name} (${(file.size / 1024).toFixed(1)} KB)]\n`);
+    }
+  };
 
   const fetchSessions = async () => {
     setLoading(true);
@@ -378,7 +387,18 @@ export default function Calendario() {
                 placeholder="Apunta algo rápido para recordar..."
               ></textarea>
               <div className="absolute bottom-3 right-3 flex gap-2">
-                <button type="button" className="bg-surface-container-high hover:bg-surface-container-highest p-2 rounded-full transition-colors text-on-surface-variant">
+                <input 
+                  type="file" 
+                  ref={fileInputRef} 
+                  onChange={handleFileAttach} 
+                  className="hidden" 
+                />
+                <button 
+                  type="button" 
+                  onClick={() => fileInputRef.current?.click()}
+                  className="bg-surface-container-high hover:bg-surface-container-highest p-2 rounded-full transition-colors text-on-surface-variant cursor-pointer"
+                  title="Adjuntar archivo"
+                >
                   <Paperclip className="w-4 h-4" />
                 </button>
                 <button type="submit" className="bg-primary text-on-primary p-2 rounded-full shadow-md hover:scale-105 active:scale-95 transition-all cursor-pointer">

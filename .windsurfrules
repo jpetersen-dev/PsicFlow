@@ -15,3 +15,9 @@ This project, **PsicoAlivio**, operates under strict quality and security standa
 - **Audit Logs**: Any mutation or read on sensitive patient files (Ley N° 19.628) must log access through triggers to the `audit.access_logs` ledger.
 - **Revoked Mutations**: The audit trail table (`audit.access_logs`) must have all `UPDATE`, `DELETE`, and `TRUNCATE` permissions revoked from public and authenticated roles to ensure immutability.
 - No database query is allowed to bypass the tenant identifier unless explicitly authorized in the security exceptions.
+
+## 3. Mandatory Client-side Form Validation
+- **RUT validation**: Any frontend form collecting a Chilean RUT (patient or professional) must invoke the `validateRut` helper from `src/utils/validators.ts` inside the submit handler. The submit must be blocked if validation fails, displaying a clear validation warning.
+- **Email validation**: Any form collecting email addresses must validate using the `validateEmail` utility before submitting.
+- **Form Submission Hijacking**: All frontend submit handlers must prevent default behaviors (`e.preventDefault()`), execute validations, handle errors gracefully, and show a loading indicator.
+

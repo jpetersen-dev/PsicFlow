@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import { X, Save, AlertTriangle } from 'lucide-react';
 import { supabase } from '../lib/supabaseClient';
+import { validateRut, validateEmail } from '../utils/validators';
+
 
 interface NewPatientModalProps {
   isOpen: boolean;
@@ -68,7 +70,18 @@ export const NewPatientModal: React.FC<NewPatientModalProps> = ({ isOpen, onClos
     setLoading(true);
     setError('');
 
+    // Clear and format RUT (e.g. dots and spaces removed, ensuring single hyphen format)
+    const cleanRut = formData.rut_patient.trim().replace(/\./g, '');
+
     try {
+      if (!validateRut(cleanRut)) {
+        throw new Error('El RUT ingresado no es válido o no cumple con el formato (ej: 12345678-9).');
+      }
+
+      if (formData.email && !validateEmail(formData.email.trim())) {
+        throw new Error('El formato del correo electrónico ingresado es incorrecto.');
+      }
+
       const activeTenant = localStorage.getItem('active-tenant-id');
       if (!activeTenant) {
         throw new Error('No se detectó una clínica activa. Por favor selecciona una en el header.');
@@ -76,12 +89,19 @@ export const NewPatientModal: React.FC<NewPatientModalProps> = ({ isOpen, onClos
 
       const fichaId = await generateFichaId();
 
+      // Normalize fields before save
+      const normalizedFormData = {
+        ...formData,
+        rut_patient: cleanRut,
+        email: formData.email ? formData.email.trim() : null
+      };
+
       const { error: insertErr } = await supabase
         .from('patients')
         .insert({
           organization_id: activeTenant,
           ficha_id_num: fichaId,
-          ...formData
+          ...normalizedFormData
         });
 
       if (insertErr) {
@@ -111,7 +131,7 @@ export const NewPatientModal: React.FC<NewPatientModalProps> = ({ isOpen, onClos
         </div>
 
         {/* Modal Form */}
-        <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-6 space-y-6">
+        <form id="new-patient-form" onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-6 space-y-6">
           {error && (
             <div className="bg-danger/10 border border-danger/20 p-4 rounded-xl flex items-center gap-3 text-sm text-danger">
               <AlertTriangle className="w-5 h-5 shrink-0" />
@@ -336,7 +356,7 @@ export const NewPatientModal: React.FC<NewPatientModalProps> = ({ isOpen, onClos
             Cancelar
           </button>
           <button 
-            type="submit" disabled={loading}
+            type="submit" form="new-patient-form" disabled={loading}
             className="bg-accent-primary hover:bg-accent-hover text-white font-bold px-4 py-2 rounded-lg flex items-center gap-2 text-sm transition-all disabled:opacity-50"
           >
             <Save className="w-4 h-4" />
