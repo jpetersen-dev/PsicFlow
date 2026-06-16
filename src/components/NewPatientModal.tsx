@@ -70,11 +70,11 @@ export const NewPatientModal: React.FC<NewPatientModalProps> = ({ isOpen, onClos
     setLoading(true);
     setError('');
 
-    // Clear and format RUT (e.g. dots and spaces removed, ensuring single hyphen format)
-    const cleanRut = formData.rut_patient.trim().replace(/\./g, '');
+    // Clear formatting to get raw alphanumeric string
+    const cleanRutStr = formData.rut_patient.trim().replace(/\./g, '').replace(/ /g, '').replace(/-/g, '');
 
     try {
-      if (!validateRut(cleanRut)) {
+      if (!validateRut(cleanRutStr)) {
         throw new Error('El RUT ingresado no es válido o no cumple con el formato (ej: 12345678-9).');
       }
 
@@ -89,10 +89,11 @@ export const NewPatientModal: React.FC<NewPatientModalProps> = ({ isOpen, onClos
 
       const fichaId = await generateFichaId();
 
-      // Normalize fields before save
+      // Normalize fields before save (RUT formatted as 12345678-9)
+      const formattedRut = cleanRutStr.slice(0, -1) + '-' + cleanRutStr.slice(-1).toUpperCase();
       const normalizedFormData = {
         ...formData,
-        rut_patient: cleanRut,
+        rut_patient: formattedRut,
         email: formData.email ? formData.email.trim() : null
       };
 
@@ -119,19 +120,19 @@ export const NewPatientModal: React.FC<NewPatientModalProps> = ({ isOpen, onClos
 
   return (
     <div className="fixed inset-0 bg-bg-primary/70 backdrop-blur-sm flex items-center justify-center z-50 p-4 overflow-y-auto">
-      <div className="bg-bg-card border border-border-color w-full max-w-4xl rounded-2xl shadow-2xl flex flex-col max-h-[90vh]">
+      <form onSubmit={handleSubmit} className="bg-bg-card border border-border-color w-full max-w-4xl rounded-2xl shadow-2xl flex flex-col max-h-[90vh]">
         {/* Modal Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-border-color">
           <h2 className="text-lg font-bold text-text-primary">
             <span>Ingresar Nuevo Paciente</span>
           </h2>
-          <button onClick={onClose} className="text-text-secondary hover:text-text-primary">
+          <button onClick={onClose} type="button" className="text-text-secondary hover:text-text-primary">
             <X className="w-5 h-5" />
           </button>
         </div>
 
-        {/* Modal Form */}
-        <form id="new-patient-form" onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-6 space-y-6">
+        {/* Modal Form Scroll Container */}
+        <div className="flex-1 overflow-y-auto p-6 space-y-6">
           {error && (
             <div className="bg-danger/10 border border-danger/20 p-4 rounded-xl flex items-center gap-3 text-sm text-danger">
               <AlertTriangle className="w-5 h-5 shrink-0" />
@@ -345,7 +346,7 @@ export const NewPatientModal: React.FC<NewPatientModalProps> = ({ isOpen, onClos
               </div>
             </div>
           </div>
-        </form>
+        </div>
 
         {/* Modal Footer */}
         <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-border-color bg-bg-sidebar/50">
@@ -356,14 +357,14 @@ export const NewPatientModal: React.FC<NewPatientModalProps> = ({ isOpen, onClos
             Cancelar
           </button>
           <button 
-            type="submit" form="new-patient-form" disabled={loading}
+            type="submit" disabled={loading}
             className="bg-accent-primary hover:bg-accent-hover text-white font-bold px-4 py-2 rounded-lg flex items-center gap-2 text-sm transition-all disabled:opacity-50"
           >
             <Save className="w-4 h-4" />
             <span>{loading ? 'Ingresando...' : 'Guardar Paciente'}</span>
           </button>
         </div>
-      </div>
+      </form>
     </div>
   );
 };

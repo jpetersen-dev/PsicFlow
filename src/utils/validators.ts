@@ -1,9 +1,10 @@
 export const validateRut = (rut: string): boolean => {
-  // Clear any formatting first (dots, hyphens)
-  const cleanRut = rut.replace(/\./g, '').replace(/ /g, '');
-  if (!/^[0-9]+-[0-9kK]{1}$/.test(cleanRut)) return false;
+  // Clear any formatting first (dots, hyphens, spaces)
+  const cleanRut = rut.replace(/\./g, '').replace(/ /g, '').replace(/-/g, '');
+  if (!/^[0-9]+[0-9kK]{1}$/.test(cleanRut)) return false;
   
-  const [num, dv] = cleanRut.split('-');
+  const num = cleanRut.slice(0, -1);
+  const dv = cleanRut.slice(-1);
   if (!num || !dv) return false;
   
   let total = 0;
