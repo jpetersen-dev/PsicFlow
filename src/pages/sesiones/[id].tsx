@@ -99,80 +99,106 @@ export default function SesionFicha() {
 
   const handleSimulateAI = async () => {
     setIsProcessingAI(true);
-    // Simulate 3 seconds of Gemini Flash audio parsing
-    setTimeout(async () => {
-      try {
-        const mockRawDraft = `PROCESAMIENTO DE AUDIO COMPLETO (SOAP):
-- Temas abordados: Exploración de sintomatología ansiosa relacionada a exigencias laborales. Miedo irracional a cometer errores y perfeccionismo clínico.
-- Síntomas observados: Sudoración palmar leve, verborrea, inquietud motora al relatar eventos de estrés laboral.
-- Plan/Intervenciones: Re-encuadre cognitivo. Tarea de registro diario de pensamientos catastróficos.`;
+    try {
+      const tenantId = localStorage.getItem('active-tenant-id') || '';
+      const transcriptText = clinicalNote?.human_validated_content || 'El paciente refiere sintomatología ansiosa asociada a carga laboral.';
 
-        const { data: updatedNote, error } = await supabase
-          .from('clinical_notes')
-          .update({
-            temas_abordados: 'Exigencias laborales, perfeccionismo clínico y ansiedad de desempeño.',
-            sintomas_observados: 'Inquietud motora, habla acelerada, tensión muscular reportada.',
-            ai_raw_draft: mockRawDraft,
-            human_validated_content: 'El paciente reporta altos niveles de estrés laboral relacionados con perfeccionismo clínico. Se exploraron miedos al fracaso. Se realiza re-encuadre y se asigna autoregistro de pensamientos ansiosos.'
-          })
-          .eq('id', clinicalNote.id)
-          .select()
-          .single();
+      // Call backend API for SOAP generation with credit billing
+      const res = await fetch('/api/ai/soap', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-tenant-id': tenantId },
+        body: JSON.stringify({ session_id: id, transcript_text: transcriptText }),
+      });
 
-        if (error) throw error;
-        
-        // Also simulate creating an active audio asset in storage
-        const tenantId = localStorage.getItem('active-tenant-id');
-        const { data: audio } = await supabase
-          .from('audio_assets')
-          .insert({
-            organization_id: tenantId,
-            note_id: clinicalNote.id,
-            storage_path: `audio/${id}/dictado.mp3`,
-            status: 'active'
-          })
-          .select()
-          .single();
-
-        setClinicalNote(updatedNote);
-        if (audio) setAudioAsset(audio);
-        setIsProcessingAI(false);
-      } catch (err: any) {
-        alert('Error: ' + err.message);
-        setIsProcessingAI(false);
+      const result = await res.json();
+      if (!res.ok) {
+        throw new Error(result.error || 'Error al procesar dictado clínico.');
       }
-    }, 2500);
+
+      const soap = result.soap;
+
+      // Update clinical note in database with SOAP result
+      const { data: updatedNote, error } = await supabase
+        .from('clinical_notes')
+        .update({
+          temas_abordados: soap.temas_abordados,
+          sintomas_observados: soap.sintomas_observados,
+          ai_raw_draft: soap.ai_raw_draft,
+          human_validated_content: soap.human_validated_content,
+        })
+        .eq('id', clinicalNote.id)
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      // Create audio asset record for the simulated dictation
+      const storagePath = `${tenantId}/${id}/dictado_${Date.now()}.mp3`;
+      const { data: audio } = await supabase
+        .from('audio_assets')
+        .insert({
+          organization_id: tenantId,
+          note_id: clinicalNote.id,
+          storage_path: storagePath,
+          status: 'active',
+        })
+        .select()
+        .single();
+
+      setClinicalNote(updatedNote);
+      if (audio) setAudioAsset(audio);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Error desconocido';
+      alert('Error: ' + message);
+    } finally {
+      setIsProcessingAI(false);
+    }
   };
 
   const handleSimulateOCR = async () => {
     setIsProcessingAI(true);
-    // Simulate OCR text parsing from clinical notes image
-    setTimeout(async () => {
-      try {
-        const { data: updatedNote, error } = await supabase
-          .from('clinical_notes')
-          .update({
-            temas_abordados: 'OCR: Apuntes clínicos transcritos sobre ansiedad laboral.',
-            sintomas_observados: 'OCR: Signos corporales de estrés, respiración superficial.',
-            human_validated_content: 'TRANSCRIPCIÓN OCR: Paciente refiere ansiedad por sobrecarga en oficina. Presenta taquicardia situacional. Estrategia: Respiración diafragmática.'
-          })
-          .eq('id', clinicalNote.id)
-          .select()
-          .single();
+    try {
+      const tenantId = localStorage.getItem('active-tenant-id') || '';
+      const ocrText = 'Apuntes manuscritos: Paciente refiere ansiedad por sobrecarga en oficina. Presenta taquicardia situacional. Estrategia: Respiración diafragmática.';
 
-        if (error) throw error;
-        setClinicalNote(updatedNote);
-        setIsProcessingAI(false);
-      } catch (err: any) {
-        alert('Error: ' + err.message);
-        setIsProcessingAI(false);
+      // Call same SOAP endpoint with OCR-transcribed text
+      const res = await fetch('/api/ai/soap', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-tenant-id': tenantId },
+        body: JSON.stringify({ session_id: id, transcript_text: ocrText }),
+      });
+
+      const result = await res.json();
+      if (!res.ok) {
+        throw new Error(result.error || 'Error al procesar transcripción OCR.');
       }
-    }, 2000);
+
+      const soap = result.soap;
+      const { data: updatedNote, error } = await supabase
+        .from('clinical_notes')
+        .update({
+          temas_abordados: soap.temas_abordados,
+          sintomas_observados: soap.sintomas_observados,
+          ai_raw_draft: soap.ai_raw_draft,
+          human_validated_content: soap.human_validated_content,
+        })
+        .eq('id', clinicalNote.id)
+        .select()
+        .single();
+
+      if (error) throw error;
+      setClinicalNote(updatedNote);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Error desconocido';
+      alert('Error: ' + message);
+    } finally {
+      setIsProcessingAI(false);
+    }
   };
 
   const handleValidateNote = async () => {
     try {
-      // 1. Sign/Validate clinical note
+      // 1. Sign/Validate clinical note (HITL protocol)
       const { data: updatedNote, error: noteErr } = await supabase
         .from('clinical_notes')
         .update({
@@ -184,8 +210,16 @@ export default function SesionFicha() {
       
       if (noteErr) throw noteErr;
 
-      // 2. Destrucción permanente de audio (Hard Delete trigger simulation)
+      // 2. Destrucción permanente de audio - Hard Delete from Supabase Storage + DB
       if (audioAsset && audioAsset.status === 'active') {
+        // Delete physical file from Supabase Storage bucket
+        if (audioAsset.storage_path) {
+          await supabase.storage
+            .from('audio-notes')
+            .remove([audioAsset.storage_path]);
+        }
+
+        // Mark database record as hard_deleted
         const { error: audioErr } = await supabase
           .from('audio_assets')
           .update({
@@ -197,10 +231,17 @@ export default function SesionFicha() {
         if (audioErr) throw audioErr;
       }
 
+      // 3. Mark session as complete
+      await supabase
+        .from('sessions')
+        .update({ status_session: 'Completa' })
+        .eq('id', id);
+
       alert('Nota clínica firmada y validada con éxito. El archivo de voz original ha sido destruido permanentemente de forma irreversible.');
       fetchSessionData();
-    } catch (err: any) {
-      alert('Error: ' + err.message);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Error desconocido';
+      alert('Error: ' + message);
     }
   };
 
@@ -243,8 +284,8 @@ export default function SesionFicha() {
     document.body.removeChild(link);
   };
 
-  if (loading) return <div className="py-20 text-center text-slate-500 text-sm">Cargando evolución de sesión...</div>;
-  if (!session) return <div className="py-20 text-center text-slate-500 text-sm">No se encontró la sesión.</div>;
+  if (loading) return <div className="py-20 text-center text-text-muted text-sm">Cargando evolución de sesión...</div>;
+  if (!session) return <div className="py-20 text-center text-text-muted text-sm">No se encontró la sesión.</div>;
 
   return (
     <>
@@ -254,26 +295,26 @@ export default function SesionFicha() {
 
       <div className="space-y-6">
         {/* Session header */}
-        <div className="bg-slate-950 border border-slate-800 rounded-2xl p-6 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+        <div className="bg-bg-card border border-border-color rounded-2xl p-6 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
           <div className="space-y-1">
-            <h1 className="text-xl font-bold flex items-center gap-2">
-              <FileText className="w-6 h-6 text-emerald-400" />
+            <h1 className="text-xl font-bold flex items-center gap-2 text-text-primary">
+              <FileText className="w-6 h-6 text-accent-primary" />
               <span>Evolución de Sesión - {maskName(session.patient?.full_name)}</span>
             </h1>
-            <p className="text-slate-400 text-sm">Fecha: {session.date_session} ({session.time_session.slice(0, 5)} hrs) • Modalidad: {session.modality}</p>
+            <p className="text-text-secondary text-sm">Fecha: {session.date_session} ({session.time_session.slice(0, 5)} hrs) • Modalidad: {session.modality}</p>
           </div>
           
           <div className="flex items-center gap-2">
             <button 
               onClick={handleDownloadPDF}
-              className="bg-slate-900 border border-slate-800 hover:bg-slate-850 px-4 py-2.5 rounded-lg text-xs font-semibold text-slate-300 flex items-center gap-1.5 transition-all"
+              className="bg-bg-input border border-border-color hover:bg-bg-card-hover px-4 py-2.5 rounded-lg text-xs font-semibold text-text-primary flex items-center gap-1.5 transition-all"
             >
               <Download className="w-4 h-4" />
               <span>Exportar Nota</span>
             </button>
             <button 
               onClick={() => router.push(`/pacientes/${session.patient_id}`)}
-              className="bg-slate-900 border border-slate-800 hover:bg-slate-850 px-4 py-2.5 rounded-lg text-xs font-semibold text-slate-300 transition-all"
+              className="bg-bg-input border border-border-color hover:bg-bg-card-hover px-4 py-2.5 rounded-lg text-xs font-semibold text-text-primary transition-all"
             >
               Ficha Paciente
             </button>
@@ -281,11 +322,11 @@ export default function SesionFicha() {
         </div>
 
         {/* Tab Controls */}
-        <div className="border-b border-slate-850 flex gap-4">
+        <div className="border-b border-border-color flex gap-4">
           <button 
             onClick={() => setActiveTab('soap')}
             className={`py-3 px-1 border-b-2 text-sm font-semibold transition-all flex items-center gap-2 ${
-              activeTab === 'soap' ? 'border-emerald-500 text-emerald-400' : 'border-transparent text-slate-400 hover:text-slate-200'
+              activeTab === 'soap' ? 'border-border-focus text-accent-primary' : 'border-transparent text-text-secondary hover:text-text-primary'
             }`}
           >
             <FileSignature className="w-4 h-4" />
@@ -294,7 +335,7 @@ export default function SesionFicha() {
           <button 
             onClick={() => setActiveTab('admin')}
             className={`py-3 px-1 border-b-2 text-sm font-semibold transition-all flex items-center gap-2 ${
-              activeTab === 'admin' ? 'border-emerald-500 text-emerald-400' : 'border-transparent text-slate-400 hover:text-slate-200'
+              activeTab === 'admin' ? 'border-border-focus text-accent-primary' : 'border-transparent text-text-secondary hover:text-text-primary'
             }`}
           >
             <DollarSign className="w-4 h-4" />
@@ -303,24 +344,24 @@ export default function SesionFicha() {
         </div>
 
         {/* Tab contents */}
-        <div className="bg-slate-950 border border-slate-800 rounded-2xl p-6">
+        <div className="bg-bg-card border border-border-color rounded-2xl p-6">
           {activeTab === 'soap' && (
             <div className="space-y-6">
               {/* Audio Cycle & AI Capture Control Panel */}
-              <div className="bg-slate-900 border border-slate-800 p-5 rounded-2xl flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+              <div className="bg-bg-input border border-border-color p-5 rounded-2xl flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                 <div className="space-y-1">
-                  <h4 className="text-sm font-bold flex items-center gap-1.5 text-slate-200">
-                    <Sparkles className="w-4 h-4 text-emerald-400" />
+                  <h4 className="text-sm font-bold flex items-center gap-1.5 text-text-primary">
+                    <Sparkles className="w-4 h-4 text-accent-primary" />
                     <span>Ciclo Multimodal de Captura IA</span>
                   </h4>
-                  <p className="text-slate-500 text-xs">Cargue el dictado de audio o una imagen de sus apuntes para generar el borrador SOAP.</p>
+                  <p className="text-text-muted text-xs">Cargue el dictado de audio o una imagen de sus apuntes para generar el borrador SOAP.</p>
                 </div>
                 
                 <div className="flex flex-wrap gap-2.5">
                   <button 
                     onClick={handleSimulateAI}
                     disabled={isProcessingAI || clinicalNote.is_human_validated}
-                    className="bg-emerald-500 hover:bg-emerald-600 disabled:opacity-50 text-slate-950 font-bold px-4 py-2 rounded-lg text-xs flex items-center gap-2 transition-all"
+                    className="bg-accent-primary hover:bg-accent-hover text-bg-primary disabled:opacity-50 font-bold px-4 py-2 rounded-lg text-xs flex items-center gap-2 transition-all"
                   >
                     <Mic className="w-4 h-4 stroke-[3]" />
                     <span>{isProcessingAI ? 'Procesando Dictado...' : 'Simular Dictado Clínico'}</span>
@@ -328,7 +369,7 @@ export default function SesionFicha() {
                   <button 
                     onClick={handleSimulateOCR}
                     disabled={isProcessingAI || clinicalNote.is_human_validated}
-                    className="bg-indigo-500/15 hover:bg-indigo-500/25 border border-indigo-500/30 text-indigo-400 disabled:opacity-50 font-bold px-4 py-2 rounded-lg text-xs flex items-center gap-2 transition-all"
+                    className="bg-accent-primary/15 hover:bg-accent-primary/25 border border-accent-primary/30 text-accent-primary disabled:opacity-50 font-bold px-4 py-2 rounded-lg text-xs flex items-center gap-2 transition-all"
                   >
                     <Camera className="w-4 h-4" />
                     <span>Transcribir Apuntes (OCR)</span>
@@ -340,8 +381,8 @@ export default function SesionFicha() {
               {clinicalNote.temas_abordados && (
                 <div className={`p-4 rounded-xl border flex items-start gap-3 text-xs leading-relaxed ${
                   clinicalNote.is_human_validated 
-                    ? 'bg-emerald-500/10 border-emerald-500/25 text-emerald-400' 
-                    : 'bg-amber-500/10 border-amber-500/25 text-amber-400'
+                    ? 'bg-success/10 border-success/25 text-success' 
+                    : 'bg-warning/10 border-warning/25 text-warning'
                 }`}>
                   <AlertCircle className="w-5 h-5 shrink-0 mt-0.5" />
                   <div className="space-y-1">
@@ -359,38 +400,38 @@ export default function SesionFicha() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="space-y-4">
                   <div>
-                    <label className="block text-xs text-slate-400 mb-1 font-semibold">Temas Abordados *</label>
+                    <label className="block text-xs text-text-secondary mb-1 font-semibold">Temas Abordados *</label>
                     <textarea 
                       rows={3} required
                       disabled={clinicalNote.is_human_validated}
                       value={clinicalNote.temas_abordados || ''}
                       onChange={(e) => setClinicalNote({ ...clinicalNote, temas_abordados: e.target.value })}
-                      className="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-sm text-slate-100 focus:outline-none disabled:opacity-60"
+                      className="w-full bg-bg-input border border-border-color rounded-lg px-3 py-2 text-sm text-text-primary focus:outline-none disabled:opacity-60"
                     />
                   </div>
 
                   <div>
-                    <label className="block text-xs text-slate-400 mb-1 font-semibold">Síntomas Reportados / Observados *</label>
+                    <label className="block text-xs text-text-secondary mb-1 font-semibold">Síntomas Reportados / Observados *</label>
                     <textarea 
                       rows={3} required
                       disabled={clinicalNote.is_human_validated}
                       value={clinicalNote.sintomas_observados || ''}
                       onChange={(e) => setClinicalNote({ ...clinicalNote, sintomas_observados: e.target.value })}
-                      className="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-sm text-slate-100 focus:outline-none disabled:opacity-60"
+                      className="w-full bg-bg-input border border-border-color rounded-lg px-3 py-2 text-sm text-text-primary focus:outline-none disabled:opacity-60"
                     />
                   </div>
                 </div>
 
                 <div className="space-y-4">
                   <div>
-                    <label className="block text-xs text-slate-400 mb-1 font-semibold">Contenido Clínico Firmado (Evolución de la Sesión) *</label>
+                    <label className="block text-xs text-text-secondary mb-1 font-semibold">Contenido Clínico Firmado (Evolución de la Sesión) *</label>
                     <textarea 
                       rows={8} required
                       disabled={clinicalNote.is_human_validated}
                       placeholder="Escriba la conceptualización terapéutica de la sesión y las intervenciones aplicadas..."
                       value={clinicalNote.human_validated_content || ''}
                       onChange={(e) => setClinicalNote({ ...clinicalNote, human_validated_content: e.target.value })}
-                      className="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-sm text-slate-100 focus:outline-none disabled:opacity-60"
+                      className="w-full bg-bg-input border border-border-color rounded-lg px-3 py-2 text-sm text-text-primary focus:outline-none disabled:opacity-60"
                     />
                   </div>
                 </div>
@@ -398,7 +439,7 @@ export default function SesionFicha() {
 
               {/* Action save/sign triggers */}
               {!clinicalNote.is_human_validated && clinicalNote.temas_abordados && (
-                <div className="flex justify-end gap-3 pt-4 border-t border-slate-850">
+                <div className="flex justify-end gap-3 pt-4 border-t border-border-color">
                   <button 
                     onClick={async () => {
                       const { error } = await supabase
@@ -412,13 +453,13 @@ export default function SesionFicha() {
                       if (error) alert(error.message);
                       else alert('Borrador clínico actualizado.');
                     }}
-                    className="px-4 py-2 border border-slate-800 hover:bg-slate-800 rounded-lg text-xs font-semibold text-slate-400 transition-all"
+                    className="px-4 py-2 border border-border-color hover:bg-bg-card-hover rounded-lg text-xs font-semibold text-text-secondary transition-all"
                   >
                     Guardar Borrador
                   </button>
                   <button 
                     onClick={handleValidateNote}
-                    className="bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold px-5 py-2 rounded-lg text-xs flex items-center gap-1.5 transition-all"
+                    className="bg-accent-primary hover:bg-accent-hover text-bg-primary font-bold px-5 py-2 rounded-lg text-xs flex items-center gap-1.5 transition-all"
                   >
                     <FileSignature className="w-4 h-4" />
                     <span>Firmar y Validar Nota</span>
@@ -428,12 +469,12 @@ export default function SesionFicha() {
 
               {/* Status of raw voice audio hard delete */}
               {audioAsset && (
-                <div className="bg-slate-900/40 border border-slate-850 p-4 rounded-xl flex items-center justify-between text-xs">
+                <div className="bg-bg-input/40 border border-border-color p-4 rounded-xl flex items-center justify-between text-xs">
                   <div className="flex items-center gap-2.5">
-                    <Clock className="w-4 h-4 text-slate-500" />
+                    <Clock className="w-4 h-4 text-text-muted" />
                     <div>
-                      <p className="font-semibold text-slate-300">Resguardo del Secreto Profesional (Ley N° 19.628)</p>
-                      <p className="text-slate-500">
+                      <p className="font-semibold text-text-primary">Resguardo del Secreto Profesional (Ley N° 19.628)</p>
+                      <p className="text-text-muted">
                         {audioAsset.status === 'active' 
                           ? `Audio temporal en almacenamiento. Expira en: ${new Date(audioAsset.expires_at).toLocaleTimeString()}`
                           : `Audio original destruido permanentemente de forma irreversible (${new Date(audioAsset.deleted_at).toLocaleString()})`
@@ -443,8 +484,8 @@ export default function SesionFicha() {
                   </div>
                   <span className={`px-2 py-0.5 rounded-full font-bold text-[9px] ${
                     audioAsset.status === 'active' 
-                      ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20' 
-                      : 'bg-rose-500/10 text-rose-400 border border-rose-500/20'
+                      ? 'bg-warning/10 text-warning border border-warning/20' 
+                      : 'bg-danger/10 text-danger border border-danger/20'
                   }`}>
                     {audioAsset.status === 'active' ? 'AUDIO ACTIVO' : 'DESTRUIDO'}
                   </span>
@@ -458,100 +499,100 @@ export default function SesionFicha() {
             <form onSubmit={handleUpdateAdminDetails} className="max-w-xl space-y-4">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs text-slate-400 mb-1 font-semibold">Modalidad de Atención</label>
+                  <label className="block text-xs text-text-secondary mb-1 font-semibold">Modalidad de Atención</label>
                   <select 
                     value={session.modality}
                     onChange={(e) => setSession({ ...session, modality: e.target.value })}
-                    className="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-sm text-slate-100 focus:outline-none"
+                    className="w-full bg-bg-input border border-border-color rounded-lg px-3 py-2 text-sm text-text-primary focus:outline-none"
                   >
-                    <option value="Online">Online</option>
-                    <option value="Presencial">Presencial</option>
+                    <option value="Online" className="bg-bg-sidebar text-text-primary">Online</option>
+                    <option value="Presencial" className="bg-bg-sidebar text-text-primary">Presencial</option>
                   </select>
                 </div>
                 <div>
-                  <label className="block text-xs text-slate-400 mb-1 font-semibold">Estado de Sesión</label>
+                  <label className="block text-xs text-text-secondary mb-1 font-semibold">Estado de Sesión</label>
                   <select 
                     value={session.status_session}
                     onChange={(e) => setSession({ ...session, status_session: e.target.value })}
-                    className="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-sm text-slate-100 focus:outline-none"
+                    className="w-full bg-bg-input border border-border-color rounded-lg px-3 py-2 text-sm text-text-primary focus:outline-none"
                   >
-                    <option value="Programada">Programada</option>
-                    <option value="Completa">Completa</option>
-                    <option value="Cancelada">Cancelada</option>
-                    <option value="Reprogramada">Reprogramada</option>
+                    <option value="Programada" className="bg-bg-sidebar text-text-primary">Programada</option>
+                    <option value="Completa" className="bg-bg-sidebar text-text-primary">Completa</option>
+                    <option value="Cancelada" className="bg-bg-sidebar text-text-primary">Cancelada</option>
+                    <option value="Reprogramada" className="bg-bg-sidebar text-text-primary">Reprogramada</option>
                   </select>
                 </div>
                 <div>
-                  <label className="block text-xs text-slate-400 mb-1 font-semibold">Valor Sesión ($)</label>
+                  <label className="block text-xs text-text-secondary mb-1 font-semibold">Valor Sesión ($)</label>
                   <input 
                     type="number"
                     value={session.value_session}
                     onChange={(e) => setSession({ ...session, value_session: e.target.value })}
-                    className="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-sm text-slate-100 focus:outline-none font-mono"
+                    className="w-full bg-bg-input border border-border-color rounded-lg px-3 py-2 text-sm text-text-primary focus:outline-none font-mono"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs text-slate-400 mb-1 font-semibold">Estado de Pago</label>
+                  <label className="block text-xs text-text-secondary mb-1 font-semibold">Estado de Pago</label>
                   <select 
                     value={session.status_payment}
                     onChange={(e) => setSession({ ...session, status_payment: e.target.value })}
-                    className="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-sm text-slate-100 focus:outline-none"
+                    className="w-full bg-bg-input border border-border-color rounded-lg px-3 py-2 text-sm text-text-primary focus:outline-none"
                   >
-                    <option value="Pendiente">Pendiente</option>
-                    <option value="Pagado">Pagado</option>
-                    <option value="Parcial">Parcial</option>
+                    <option value="Pendiente" className="bg-bg-sidebar text-text-primary">Pendiente</option>
+                    <option value="Pagado" className="bg-bg-sidebar text-text-primary">Pagado</option>
+                    <option value="Parcial" className="bg-bg-sidebar text-text-primary">Parcial</option>
                   </select>
                 </div>
                 <div>
-                  <label className="block text-xs text-slate-400 mb-1 font-semibold">Medio de Pago</label>
+                  <label className="block text-xs text-text-secondary mb-1 font-semibold">Medio de Pago</label>
                   <select 
                     value={session.payment_type || ''}
                     onChange={(e) => setSession({ ...session, payment_type: e.target.value })}
-                    className="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-sm text-slate-100 focus:outline-none"
+                    className="w-full bg-bg-input border border-border-color rounded-lg px-3 py-2 text-sm text-text-primary focus:outline-none"
                   >
-                    <option value="">Seleccione...</option>
-                    <option value="Transferencia electrónica">Transferencia electrónica</option>
-                    <option value="Efectivo">Efectivo</option>
-                    <option value="Tarjeta de crédito/débito">Tarjeta de crédito/débito</option>
-                    <option value="Otro">Otro</option>
+                    <option value="" className="bg-bg-sidebar text-text-primary">Seleccione...</option>
+                    <option value="Transferencia electrónica" className="bg-bg-sidebar text-text-primary">Transferencia electrónica</option>
+                    <option value="Efectivo" className="bg-bg-sidebar text-text-primary">Efectivo</option>
+                    <option value="Tarjeta de crédito/débito" className="bg-bg-sidebar text-text-primary">Tarjeta de crédito/débito</option>
+                    <option value="Otro" className="bg-bg-sidebar text-text-primary">Otro</option>
                   </select>
                 </div>
                 <div>
-                  <label className="block text-xs text-slate-400 mb-1 font-semibold">Identificador de Transacción</label>
+                  <label className="block text-xs text-text-secondary mb-1 font-semibold">Identificador de Transacción</label>
                   <input 
                     type="text"
                     value={session.transaction_id || ''}
                     onChange={(e) => setSession({ ...session, transaction_id: e.target.value })}
-                    className="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-sm text-slate-100 focus:outline-none font-mono"
+                    className="w-full bg-bg-input border border-border-color rounded-lg px-3 py-2 text-sm text-text-primary focus:outline-none font-mono"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs text-slate-400 mb-1 font-semibold">Estado Boleta (SII)</label>
+                  <label className="block text-xs text-text-secondary mb-1 font-semibold">Estado Boleta (SII)</label>
                   <select 
                     value={session.boleta_status}
                     onChange={(e) => setSession({ ...session, boleta_status: e.target.value })}
-                    className="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-sm text-slate-100 focus:outline-none"
+                    className="w-full bg-bg-input border border-border-color rounded-lg px-3 py-2 text-sm text-text-primary focus:outline-none"
                   >
-                    <option value="Pendiente">Pendiente</option>
-                    <option value="Emitida">Emitida</option>
-                    <option value="No Aplica">No Aplica</option>
+                    <option value="Pendiente" className="bg-bg-sidebar text-text-primary">Pendiente</option>
+                    <option value="Emitida" className="bg-bg-sidebar text-text-primary">Emitida</option>
+                    <option value="No Aplica" className="bg-bg-sidebar text-text-primary">No Aplica</option>
                   </select>
                 </div>
               </div>
 
               <div>
-                <label className="block text-xs text-slate-400 mb-1 font-semibold">Comentarios Internos Administrativos</label>
+                <label className="block text-xs text-text-secondary mb-1 font-semibold">Comentarios Internos Administrativos</label>
                 <textarea 
                   rows={3}
                   value={session.comentarios_internos || ''}
                   onChange={(e) => setSession({ ...session, comentarios_internos: e.target.value })}
-                  className="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-sm text-slate-100 focus:outline-none"
+                  className="w-full bg-bg-input border border-border-color rounded-lg px-3 py-2 text-sm text-text-primary focus:outline-none"
                 />
               </div>
 
               <button 
                 type="submit"
-                className="bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold px-4 py-2.5 rounded-lg text-xs transition-all"
+                className="bg-accent-primary hover:bg-accent-hover text-bg-primary font-bold px-4 py-2.5 rounded-lg text-xs transition-all"
               >
                 Guardar Cambios Administrativos
               </button>

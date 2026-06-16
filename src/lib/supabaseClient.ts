@@ -12,15 +12,14 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     persistSession: true,
   },
   global: {
-    // Dynamic getter evaluates local storage tenant on every database request
-    get headers(): Record<string, string> {
-      if (typeof window !== 'undefined') {
-        const tenantId = localStorage.getItem('active-tenant-id');
-        if (tenantId) {
-          return { 'x-tenant-id': tenantId };
-        }
+    fetch: (url, options = {}) => {
+      const tenantId = typeof window !== 'undefined' ? localStorage.getItem('active-tenant-id') : null;
+      if (tenantId) {
+        const headers = new Headers(options.headers);
+        headers.set('x-tenant-id', tenantId);
+        options.headers = headers;
       }
-      return {};
+      return fetch(url, options);
     },
   },
 });
