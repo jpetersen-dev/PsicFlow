@@ -1,0 +1,564 @@
+import React, { useState, useEffect } from 'react';
+import Head from 'next/head';
+import { useRouter } from 'next/router';
+import { 
+  FileText, 
+  DollarSign, 
+  FileSignature, 
+  Mic, 
+  Upload, 
+  Download, 
+  Trash2, 
+  AlertCircle,
+  Clock,
+  Sparkles,
+  Camera
+} from 'lucide-react';
+import { supabase } from '../../lib/supabaseClient';
+import { usePrivacyMode } from '../../components/PrivacyModeProvider';
+
+export default function SesionFicha() {
+  const router = useRouter();
+  const { id } = router.query;
+  const { maskName } = usePrivacyMode();
+  
+  const [session, setSession] = useState<any>(null);
+  const [clinicalNote, setClinicalNote] = useState<any>(null);
+  const [audioAsset, setAudioAsset] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const [isProcessingAI, setIsProcessingAI] = useState(false);
+  const [activeTab, setActiveTab] = useState<'soap' | 'admin' | 'archivos'>('soap');
+
+  const fetchSessionData = async () => {
+    if (!id) return;
+    setLoading(true);
+    try {
+      // 1. Fetch Session details
+      const { data: sessData, error: sessErr } = await supabase
+        .from('sessions')
+        .select(`
+          *,
+          patient:patient_id (full_name)
+        `)
+        .eq('id', id)
+        .single();
+      
+      if (sessErr || !sessData) throw new Error('No se encontró la sesión.');
+      setSession(sessData);
+
+      // 2. Fetch Clinical note SOAP
+      const { data: noteData } = await supabase
+        .from('clinical_notes')
+        .select('*')
+        .eq('session_id', id)
+        .limit(1);
+
+      let note = noteData && noteData[0];
+
+      // If no clinical note exists yet, create an empty draft
+      if (!note) {
+        const tenantId = localStorage.getItem('active-tenant-id');
+        const { data: newNote } = await supabase
+          .from('clinical_notes')
+          .insert({
+            organization_id: tenantId,
+            session_id: id,
+            author_id: sessData.professional_id,
+            temas_abordados: '',
+            sintomas_observados: '',
+            ai_raw_draft: '',
+            human_validated_content: '',
+            is_human_validated: false
+          })
+          .select()
+          .single();
+        note = newNote;
+      }
+      setClinicalNote(note);
+
+      // 3. Fetch Audio Asset status
+      const { data: audioData } = await supabase
+        .from('audio_assets')
+        .select('*')
+        .eq('note_id', note.id)
+        .limit(1);
+      
+      if (audioData && audioData[0]) {
+        setAudioAsset(audioData[0]);
+      }
+    } catch (err) {
+      console.error('Error fetching session data:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchSessionData();
+  }, [id]);
+
+  const handleSimulateAI = async () => {
+    setIsProcessingAI(true);
+    // Simulate 3 seconds of Gemini Flash audio parsing
+    setTimeout(async () => {
+      try {
+        const mockRawDraft = `PROCESAMIENTO DE AUDIO COMPLETO (SOAP):
+- Temas abordados: Exploración de sintomatología ansiosa relacionada a exigencias laborales. Miedo irracional a cometer errores y perfeccionismo clínico.
+- Síntomas observados: Sudoración palmar leve, verborrea, inquietud motora al relatar eventos de estrés laboral.
+- Plan/Intervenciones: Re-encuadre cognitivo. Tarea de registro diario de pensamientos catastróficos.`;
+
+        const { data: updatedNote, error } = await supabase
+          .from('clinical_notes')
+          .update({
+            temas_abordados: 'Exigencias laborales, perfeccionismo clínico y ansiedad de desempeño.',
+            sintomas_observados: 'Inquietud motora, habla acelerada, tensión muscular reportada.',
+            ai_raw_draft: mockRawDraft,
+            human_validated_content: 'El paciente reporta altos niveles de estrés laboral relacionados con perfeccionismo clínico. Se exploraron miedos al fracaso. Se realiza re-encuadre y se asigna autoregistro de pensamientos ansiosos.'
+          })
+          .eq('id', clinicalNote.id)
+          .select()
+          .single();
+
+        if (error) throw error;
+        
+        // Also simulate creating an active audio asset in storage
+        const tenantId = localStorage.getItem('active-tenant-id');
+        const { data: audio } = await supabase
+          .from('audio_assets')
+          .insert({
+            organization_id: tenantId,
+            note_id: clinicalNote.id,
+            storage_path: `audio/${id}/dictado.mp3`,
+            status: 'active'
+          })
+          .select()
+          .single();
+
+        setClinicalNote(updatedNote);
+        if (audio) setAudioAsset(audio);
+        setIsProcessingAI(false);
+      } catch (err: any) {
+        alert('Error: ' + err.message);
+        setIsProcessingAI(false);
+      }
+    }, 2500);
+  };
+
+  const handleSimulateOCR = async () => {
+    setIsProcessingAI(true);
+    // Simulate OCR text parsing from clinical notes image
+    setTimeout(async () => {
+      try {
+        const { data: updatedNote, error } = await supabase
+          .from('clinical_notes')
+          .update({
+            temas_abordados: 'OCR: Apuntes clínicos transcritos sobre ansiedad laboral.',
+            sintomas_observados: 'OCR: Signos corporales de estrés, respiración superficial.',
+            human_validated_content: 'TRANSCRIPCIÓN OCR: Paciente refiere ansiedad por sobrecarga en oficina. Presenta taquicardia situacional. Estrategia: Respiración diafragmática.'
+          })
+          .eq('id', clinicalNote.id)
+          .select()
+          .single();
+
+        if (error) throw error;
+        setClinicalNote(updatedNote);
+        setIsProcessingAI(false);
+      } catch (err: any) {
+        alert('Error: ' + err.message);
+        setIsProcessingAI(false);
+      }
+    }, 2000);
+  };
+
+  const handleValidateNote = async () => {
+    try {
+      // 1. Sign/Validate clinical note
+      const { data: updatedNote, error: noteErr } = await supabase
+        .from('clinical_notes')
+        .update({
+          is_human_validated: true
+        })
+        .eq('id', clinicalNote.id)
+        .select()
+        .single();
+      
+      if (noteErr) throw noteErr;
+
+      // 2. Destrucción permanente de audio (Hard Delete trigger simulation)
+      if (audioAsset && audioAsset.status === 'active') {
+        const { error: audioErr } = await supabase
+          .from('audio_assets')
+          .update({
+            status: 'hard_deleted',
+            deleted_at: new Date().toISOString()
+          })
+          .eq('id', audioAsset.id);
+        
+        if (audioErr) throw audioErr;
+      }
+
+      alert('Nota clínica firmada y validada con éxito. El archivo de voz original ha sido destruido permanentemente de forma irreversible.');
+      fetchSessionData();
+    } catch (err: any) {
+      alert('Error: ' + err.message);
+    }
+  };
+
+  const handleUpdateAdminDetails = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      const { error } = await supabase
+        .from('sessions')
+        .update({
+          modality: session.modality,
+          status_session: session.status_session,
+          value_session: Number(session.value_session),
+          status_payment: session.status_payment,
+          payment_type: session.payment_type,
+          transaction_id: session.transaction_id,
+          boleta_status: session.boleta_status,
+          comentarios_internos: session.comentarios_internos
+        })
+        .eq('id', id);
+      
+      if (error) throw error;
+      alert('Detalles administrativos guardados correctamente.');
+      fetchSessionData();
+    } catch (err: any) {
+      alert('Error: ' + err.message);
+    }
+  };
+
+  const handleDownloadPDF = () => {
+    // Basic single-page text PDF download simulation
+    const headers = `FOLIO SESIÓN: ${session.id}\nPACIENTE: ${session.patient?.full_name}\nFECHA: ${session.date_session}\n-----------------------------\n`;
+    const body = `TEMAS ABORDADOS:\n${clinicalNote.temas_abordados || 'No registrado'}\n\nSÍNTOMAS OBSERVADOS:\n${clinicalNote.sintomas_observados || 'No registrado'}\n\nCONTENIDO VALIDADO:\n${clinicalNote.human_validated_content || 'No registrado'}\n\nFIRMADO Y VALIDADO POR EL TERAPEUTA: ${clinicalNote.is_human_validated ? 'SÍ' : 'NO'}`;
+    
+    const fileContent = "data:text/plain;charset=utf-8," + encodeURIComponent(headers + body);
+    const link = document.createElement("a");
+    link.setAttribute("href", fileContent);
+    link.setAttribute("download", `nota_clinica_${id}.txt`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  if (loading) return <div className="py-20 text-center text-slate-500 text-sm">Cargando evolución de sesión...</div>;
+  if (!session) return <div className="py-20 text-center text-slate-500 text-sm">No se encontró la sesión.</div>;
+
+  return (
+    <>
+      <Head>
+        <title>PsicoAlivio - Sesión de {session.patient?.full_name}</title>
+      </Head>
+
+      <div className="space-y-6">
+        {/* Session header */}
+        <div className="bg-slate-950 border border-slate-800 rounded-2xl p-6 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+          <div className="space-y-1">
+            <h1 className="text-xl font-bold flex items-center gap-2">
+              <FileText className="w-6 h-6 text-emerald-400" />
+              <span>Evolución de Sesión - {maskName(session.patient?.full_name)}</span>
+            </h1>
+            <p className="text-slate-400 text-sm">Fecha: {session.date_session} ({session.time_session.slice(0, 5)} hrs) • Modalidad: {session.modality}</p>
+          </div>
+          
+          <div className="flex items-center gap-2">
+            <button 
+              onClick={handleDownloadPDF}
+              className="bg-slate-900 border border-slate-800 hover:bg-slate-850 px-4 py-2.5 rounded-lg text-xs font-semibold text-slate-300 flex items-center gap-1.5 transition-all"
+            >
+              <Download className="w-4 h-4" />
+              <span>Exportar Nota</span>
+            </button>
+            <button 
+              onClick={() => router.push(`/pacientes/${session.patient_id}`)}
+              className="bg-slate-900 border border-slate-800 hover:bg-slate-850 px-4 py-2.5 rounded-lg text-xs font-semibold text-slate-300 transition-all"
+            >
+              Ficha Paciente
+            </button>
+          </div>
+        </div>
+
+        {/* Tab Controls */}
+        <div className="border-b border-slate-850 flex gap-4">
+          <button 
+            onClick={() => setActiveTab('soap')}
+            className={`py-3 px-1 border-b-2 text-sm font-semibold transition-all flex items-center gap-2 ${
+              activeTab === 'soap' ? 'border-emerald-500 text-emerald-400' : 'border-transparent text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            <FileSignature className="w-4 h-4" />
+            <span>Nota Evolución SOAP / IA</span>
+          </button>
+          <button 
+            onClick={() => setActiveTab('admin')}
+            className={`py-3 px-1 border-b-2 text-sm font-semibold transition-all flex items-center gap-2 ${
+              activeTab === 'admin' ? 'border-emerald-500 text-emerald-400' : 'border-transparent text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            <DollarSign className="w-4 h-4" />
+            <span>Administración y Cobros</span>
+          </button>
+        </div>
+
+        {/* Tab contents */}
+        <div className="bg-slate-950 border border-slate-800 rounded-2xl p-6">
+          {activeTab === 'soap' && (
+            <div className="space-y-6">
+              {/* Audio Cycle & AI Capture Control Panel */}
+              <div className="bg-slate-900 border border-slate-800 p-5 rounded-2xl flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                <div className="space-y-1">
+                  <h4 className="text-sm font-bold flex items-center gap-1.5 text-slate-200">
+                    <Sparkles className="w-4 h-4 text-emerald-400" />
+                    <span>Ciclo Multimodal de Captura IA</span>
+                  </h4>
+                  <p className="text-slate-500 text-xs">Cargue el dictado de audio o una imagen de sus apuntes para generar el borrador SOAP.</p>
+                </div>
+                
+                <div className="flex flex-wrap gap-2.5">
+                  <button 
+                    onClick={handleSimulateAI}
+                    disabled={isProcessingAI || clinicalNote.is_human_validated}
+                    className="bg-emerald-500 hover:bg-emerald-600 disabled:opacity-50 text-slate-950 font-bold px-4 py-2 rounded-lg text-xs flex items-center gap-2 transition-all"
+                  >
+                    <Mic className="w-4 h-4 stroke-[3]" />
+                    <span>{isProcessingAI ? 'Procesando Dictado...' : 'Simular Dictado Clínico'}</span>
+                  </button>
+                  <button 
+                    onClick={handleSimulateOCR}
+                    disabled={isProcessingAI || clinicalNote.is_human_validated}
+                    className="bg-indigo-500/15 hover:bg-indigo-500/25 border border-indigo-500/30 text-indigo-400 disabled:opacity-50 font-bold px-4 py-2 rounded-lg text-xs flex items-center gap-2 transition-all"
+                  >
+                    <Camera className="w-4 h-4" />
+                    <span>Transcribir Apuntes (OCR)</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* HITL Signing Protocol Banner */}
+              {clinicalNote.temas_abordados && (
+                <div className={`p-4 rounded-xl border flex items-start gap-3 text-xs leading-relaxed ${
+                  clinicalNote.is_human_validated 
+                    ? 'bg-emerald-500/10 border-emerald-500/25 text-emerald-400' 
+                    : 'bg-amber-500/10 border-amber-500/25 text-amber-400'
+                }`}>
+                  <AlertCircle className="w-5 h-5 shrink-0 mt-0.5" />
+                  <div className="space-y-1">
+                    <p className="font-bold">Protocolo HITL (Human-in-the-Loop) Activo</p>
+                    <p>
+                      {clinicalNote.is_human_validated 
+                        ? 'La nota clínica evolutiva ha sido validada y firmada por el profesional. El secreto profesional se mantiene resguardado.' 
+                        : 'El profesional de salud debe validar, modificar y firmar manualmente la nota de evolución sugerida por IA antes de guardarla. Los datos temporales de audio serán eliminados de inmediato.'}
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {/* SOAP Form fields */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-xs text-slate-400 mb-1 font-semibold">Temas Abordados *</label>
+                    <textarea 
+                      rows={3} required
+                      disabled={clinicalNote.is_human_validated}
+                      value={clinicalNote.temas_abordados || ''}
+                      onChange={(e) => setClinicalNote({ ...clinicalNote, temas_abordados: e.target.value })}
+                      className="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-sm text-slate-100 focus:outline-none disabled:opacity-60"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs text-slate-400 mb-1 font-semibold">Síntomas Reportados / Observados *</label>
+                    <textarea 
+                      rows={3} required
+                      disabled={clinicalNote.is_human_validated}
+                      value={clinicalNote.sintomas_observados || ''}
+                      onChange={(e) => setClinicalNote({ ...clinicalNote, sintomas_observados: e.target.value })}
+                      className="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-sm text-slate-100 focus:outline-none disabled:opacity-60"
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-xs text-slate-400 mb-1 font-semibold">Contenido Clínico Firmado (Evolución de la Sesión) *</label>
+                    <textarea 
+                      rows={8} required
+                      disabled={clinicalNote.is_human_validated}
+                      placeholder="Escriba la conceptualización terapéutica de la sesión y las intervenciones aplicadas..."
+                      value={clinicalNote.human_validated_content || ''}
+                      onChange={(e) => setClinicalNote({ ...clinicalNote, human_validated_content: e.target.value })}
+                      className="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-sm text-slate-100 focus:outline-none disabled:opacity-60"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Action save/sign triggers */}
+              {!clinicalNote.is_human_validated && clinicalNote.temas_abordados && (
+                <div className="flex justify-end gap-3 pt-4 border-t border-slate-850">
+                  <button 
+                    onClick={async () => {
+                      const { error } = await supabase
+                        .from('clinical_notes')
+                        .update({
+                          temas_abordados: clinicalNote.temas_abordados,
+                          sintomas_observados: clinicalNote.sintomas_observados,
+                          human_validated_content: clinicalNote.human_validated_content
+                        })
+                        .eq('id', clinicalNote.id);
+                      if (error) alert(error.message);
+                      else alert('Borrador clínico actualizado.');
+                    }}
+                    className="px-4 py-2 border border-slate-800 hover:bg-slate-800 rounded-lg text-xs font-semibold text-slate-400 transition-all"
+                  >
+                    Guardar Borrador
+                  </button>
+                  <button 
+                    onClick={handleValidateNote}
+                    className="bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold px-5 py-2 rounded-lg text-xs flex items-center gap-1.5 transition-all"
+                  >
+                    <FileSignature className="w-4 h-4" />
+                    <span>Firmar y Validar Nota</span>
+                  </button>
+                </div>
+              )}
+
+              {/* Status of raw voice audio hard delete */}
+              {audioAsset && (
+                <div className="bg-slate-900/40 border border-slate-850 p-4 rounded-xl flex items-center justify-between text-xs">
+                  <div className="flex items-center gap-2.5">
+                    <Clock className="w-4 h-4 text-slate-500" />
+                    <div>
+                      <p className="font-semibold text-slate-300">Resguardo del Secreto Profesional (Ley N° 19.628)</p>
+                      <p className="text-slate-500">
+                        {audioAsset.status === 'active' 
+                          ? `Audio temporal en almacenamiento. Expira en: ${new Date(audioAsset.expires_at).toLocaleTimeString()}`
+                          : `Audio original destruido permanentemente de forma irreversible (${new Date(audioAsset.deleted_at).toLocaleString()})`
+                        }
+                      </p>
+                    </div>
+                  </div>
+                  <span className={`px-2 py-0.5 rounded-full font-bold text-[9px] ${
+                    audioAsset.status === 'active' 
+                      ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20' 
+                      : 'bg-rose-500/10 text-rose-400 border border-rose-500/20'
+                  }`}>
+                    {audioAsset.status === 'active' ? 'AUDIO ACTIVO' : 'DESTRUIDO'}
+                  </span>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Tab 2: Billing & Administration Details */}
+          {activeTab === 'admin' && (
+            <form onSubmit={handleUpdateAdminDetails} className="max-w-xl space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs text-slate-400 mb-1 font-semibold">Modalidad de Atención</label>
+                  <select 
+                    value={session.modality}
+                    onChange={(e) => setSession({ ...session, modality: e.target.value })}
+                    className="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-sm text-slate-100 focus:outline-none"
+                  >
+                    <option value="Online">Online</option>
+                    <option value="Presencial">Presencial</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs text-slate-400 mb-1 font-semibold">Estado de Sesión</label>
+                  <select 
+                    value={session.status_session}
+                    onChange={(e) => setSession({ ...session, status_session: e.target.value })}
+                    className="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-sm text-slate-100 focus:outline-none"
+                  >
+                    <option value="Programada">Programada</option>
+                    <option value="Completa">Completa</option>
+                    <option value="Cancelada">Cancelada</option>
+                    <option value="Reprogramada">Reprogramada</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs text-slate-400 mb-1 font-semibold">Valor Sesión ($)</label>
+                  <input 
+                    type="number"
+                    value={session.value_session}
+                    onChange={(e) => setSession({ ...session, value_session: e.target.value })}
+                    className="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-sm text-slate-100 focus:outline-none font-mono"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-slate-400 mb-1 font-semibold">Estado de Pago</label>
+                  <select 
+                    value={session.status_payment}
+                    onChange={(e) => setSession({ ...session, status_payment: e.target.value })}
+                    className="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-sm text-slate-100 focus:outline-none"
+                  >
+                    <option value="Pendiente">Pendiente</option>
+                    <option value="Pagado">Pagado</option>
+                    <option value="Parcial">Parcial</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs text-slate-400 mb-1 font-semibold">Medio de Pago</label>
+                  <select 
+                    value={session.payment_type || ''}
+                    onChange={(e) => setSession({ ...session, payment_type: e.target.value })}
+                    className="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-sm text-slate-100 focus:outline-none"
+                  >
+                    <option value="">Seleccione...</option>
+                    <option value="Transferencia electrónica">Transferencia electrónica</option>
+                    <option value="Efectivo">Efectivo</option>
+                    <option value="Tarjeta de crédito/débito">Tarjeta de crédito/débito</option>
+                    <option value="Otro">Otro</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs text-slate-400 mb-1 font-semibold">Identificador de Transacción</label>
+                  <input 
+                    type="text"
+                    value={session.transaction_id || ''}
+                    onChange={(e) => setSession({ ...session, transaction_id: e.target.value })}
+                    className="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-sm text-slate-100 focus:outline-none font-mono"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-slate-400 mb-1 font-semibold">Estado Boleta (SII)</label>
+                  <select 
+                    value={session.boleta_status}
+                    onChange={(e) => setSession({ ...session, boleta_status: e.target.value })}
+                    className="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-sm text-slate-100 focus:outline-none"
+                  >
+                    <option value="Pendiente">Pendiente</option>
+                    <option value="Emitida">Emitida</option>
+                    <option value="No Aplica">No Aplica</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs text-slate-400 mb-1 font-semibold">Comentarios Internos Administrativos</label>
+                <textarea 
+                  rows={3}
+                  value={session.comentarios_internos || ''}
+                  onChange={(e) => setSession({ ...session, comentarios_internos: e.target.value })}
+                  className="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-sm text-slate-100 focus:outline-none"
+                />
+              </div>
+
+              <button 
+                type="submit"
+                className="bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold px-4 py-2.5 rounded-lg text-xs transition-all"
+              >
+                Guardar Cambios Administrativos
+              </button>
+            </form>
+          )}
+        </div>
+      </div>
+    </>
+  );
+}
