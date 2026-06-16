@@ -1,0 +1,17 @@
+# Windsurf Global Behavior & Coding Constraints
+
+This project, **PsicoAlivio**, operates under strict quality and security standards. The following rules are active and must be enforced by all agents:
+
+## 1. Strict TypeScript Constraints
+- All Next.js and frontend files must use strict TypeScript.
+- No `any` type is allowed. If a type is unknown, use `unknown` or define exact interfaces.
+- Avoid non-null assertions (`!`). Use proper optional chaining (`?.`) or explicit null checks.
+- Every function, component prop, and state must be explicitly typed.
+- Enforce strict null checks (`"strictNullChecks": true` in `tsconfig.json`).
+
+## 2. Mandatory Row-Level Security (RLS) in Cascade
+- **Rule**: Every single table created in the PostgreSQL database (Supabase) must have Row-Level Security (RLS) enabled.
+- **Cascade Policy**: RLS policies must cascade appropriately. Policies must isolate data at the organization level (`organization_id = current_setting('app.current_tenant', true)::UUID`).
+- **Audit Logs**: Any mutation or read on sensitive patient files (Ley N° 19.628) must log access through triggers to the `audit.access_logs` ledger.
+- **Revoked Mutations**: The audit trail table (`audit.access_logs`) must have all `UPDATE`, `DELETE`, and `TRUNCATE` permissions revoked from public and authenticated roles to ensure immutability.
+- No database query is allowed to bypass the tenant identifier unless explicitly authorized in the security exceptions.
