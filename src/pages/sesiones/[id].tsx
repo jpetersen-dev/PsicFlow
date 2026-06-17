@@ -354,7 +354,7 @@ export default function SesionFicha() {
             ${logoImg}
             <div style="float: left;">
               <h1 class="title">REGISTRO CLÍNICO DE EVOLUCIÓN</h1>
-              <p class="subtitle">Ecosistema Clínico PsicoAlivio</p>
+              <p class="subtitle">Ecosistema Clínico PsicFlow</p>
             </div>
           </div>
           
@@ -443,7 +443,9 @@ export default function SesionFicha() {
           <div class="header">
             ${logoHtml}
             <div class="title">REGISTRO CLÍNICO DE EVOLUCIÓN</div>
-            <p style="font-size: 9pt; color: #666;">PsicoAlivio Ecosistema Clínico</p>
+            <div style="text-align: right;">
+                <p style="font-size: 9pt; color: #666;">PsicFlow Ecosistema Clínico</p>
+            </div>
           </div>
           
           <table class="meta-table">
@@ -491,7 +493,7 @@ export default function SesionFicha() {
   return (
     <>
       <Head>
-        <title>PsicoAlivio - Sesión de {session.patient?.full_name}</title>
+        <title>PsicFlow - Sesión de {session.patient?.full_name}</title>
       </Head>
 
       <div className="space-y-6">

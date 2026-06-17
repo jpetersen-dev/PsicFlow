@@ -153,7 +153,7 @@ export default function Reportes() {
   return (
     <>
       <Head>
-        <title>PsicoAlivio - Reportes y Finanzas</title>
+        <title>PsicFlow - Reportes y Finanzas</title>
       </Head>
 
       <div className="space-y-6">

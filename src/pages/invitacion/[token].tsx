@@ -166,7 +166,7 @@ export default function InvitacionRegistro() {
   return (
     <>
       <Head>
-        <title>PsicoAlivio - Registro por Invitación</title>
+        <title>PsicFlow - Registro por Invitación</title>
       </Head>
 
       <div className="w-full max-w-lg bg-bg-card border border-border-color rounded-3xl shadow-2xl p-8 space-y-6 my-10">

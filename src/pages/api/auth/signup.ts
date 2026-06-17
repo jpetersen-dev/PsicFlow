@@ -69,7 +69,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
       if (authErr || !authData.user) {
         return res.status(400).json({ 
-          error: 'Este correo ya está registrado en PsicoAlivio. Por favor, ingresa la contraseña correcta de tu cuenta existente para vincular esta clínica.' 
+          error: 'Este correo ya está registrado en PsicFlow. Por favor, ingresa la contraseña correcta de tu cuenta existente para vincular esta clínica.' 
         });
       }
     } else {

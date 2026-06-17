@@ -178,7 +178,7 @@ export default function Pacientes() {
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, 'Pacientes');
 
-    XLSX.writeFile(workbook, `psicoalivio_crm_pacientes_${new Date().toISOString().split('T')[0]}.xlsx`);
+    XLSX.writeFile(workbook, `psicflow_crm_pacientes_${new Date().toISOString().split('T')[0]}.xlsx`);
   };
 
   const handleImportExcel = (e: React.ChangeEvent<HTMLInputElement>) => {

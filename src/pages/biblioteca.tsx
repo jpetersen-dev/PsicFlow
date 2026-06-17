@@ -264,7 +264,7 @@ export default function Biblioteca() {
   return (
     <>
       <Head>
-        <title>PsicoAlivio - Biblioteca de Recursos</title>
+        <title>PsicFlow - Biblioteca de Recursos</title>
       </Head>
 
       <div className="space-y-6">

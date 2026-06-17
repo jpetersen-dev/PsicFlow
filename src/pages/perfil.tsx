@@ -18,6 +18,7 @@ import { supabase } from '../lib/supabaseClient';
 export default function Perfil() {
   const [profile, setProfile] = useState<any>(null);
   const [organization, setOrganization] = useState<any>(null);
+  const [userClinics, setUserClinics] = useState<any[]>([]);
   
   // Simulation states
   const [recharge, setRecharge] = useState({ type_unit: 'NOTA_IA', amount: 50 });
@@ -145,11 +146,137 @@ export default function Perfil() {
         setOrganization(orgData);
       }
 
+      // Get all user clinics
+      await fetchUserClinics(session.user.id);
+
     } catch (err) {
       console.error(err);
     } finally {
       setLoading(false);
     }
+  };
+
+  const fetchUserClinics = async (userId: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select(`
+          id,
+          role_name,
+          organization_id,
+          email,
+          organizations (
+            name,
+            current_plan
+          )
+        `)
+        .eq('user_id', userId);
+        
+      if (!error && data) {
+        setUserClinics(data);
+      }
+    } catch (err) {
+      console.error('Error fetching user clinics:', err);
+    }
+  };
+
+  const handleDeleteClinic = async (orgId: string, orgName: string) => {
+    const confirmDelete = confirm(`¿Estás seguro de que deseas ELIMINAR COMPLETAMENTE la clínica "${orgName}"?\n\nEsta acción es irreversible y eliminará todos los pacientes, fichas clínicas, sesiones y registros vinculados.`);
+    if (!confirmDelete) return;
+
+    const secondConfirm = prompt(`Por favor, escribe "ELIMINAR" en mayúsculas para confirmar la eliminación definitiva de "${orgName}":`);
+    if (secondConfirm !== 'ELIMINAR') {
+      alert('Confirmación incorrecta. Eliminación cancelada.');
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      const { createClient } = await import('@supabase/supabase-js');
+      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
+      const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
+      
+      const supabaseTenant = createClient(supabaseUrl, supabaseAnonKey, {
+        global: { headers: { 'x-tenant-id': orgId } },
+      });
+
+      const { error } = await supabaseTenant
+        .from('organizations')
+        .delete()
+        .eq('id', orgId);
+
+      if (error) throw error;
+
+      alert(`Clínica "${orgName}" eliminada correctamente.`);
+
+      const activeTenant = localStorage.getItem('active-tenant-id');
+      if (activeTenant === orgId) {
+        const remaining = userClinics.filter((c: any) => c.organization_id !== orgId);
+        if (remaining.length > 0) {
+          localStorage.setItem('active-tenant-id', remaining[0].organization_id);
+          window.location.reload();
+        } else {
+          localStorage.removeItem('active-tenant-id');
+          await supabase.auth.signOut();
+          window.location.href = '/';
+        }
+      } else {
+        await fetchProfileAndOrg();
+      }
+    } catch (err: any) {
+      alert('Error al eliminar la clínica: ' + err.message);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleLeaveClinic = async (profileId: string, orgId: string, orgName: string) => {
+    const confirmLeave = confirm(`¿Deseas salir de la clínica "${orgName}"? Perderás acceso a toda la información clínica de este establecimiento.`);
+    if (!confirmLeave) return;
+
+    setSubmitting(true);
+    try {
+      const { createClient } = await import('@supabase/supabase-js');
+      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
+      const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
+      
+      const supabaseTenant = createClient(supabaseUrl, supabaseAnonKey, {
+        global: { headers: { 'x-tenant-id': orgId } },
+      });
+
+      const { error } = await supabaseTenant
+        .from('profiles')
+        .delete()
+        .eq('id', profileId);
+
+      if (error) throw error;
+
+      alert(`Has salido de la clínica "${orgName}" con éxito.`);
+
+      const activeTenant = localStorage.getItem('active-tenant-id');
+      if (activeTenant === orgId) {
+        const remaining = userClinics.filter((c: any) => c.organization_id !== orgId);
+        if (remaining.length > 0) {
+          localStorage.setItem('active-tenant-id', remaining[0].organization_id);
+          window.location.reload();
+        } else {
+          localStorage.removeItem('active-tenant-id');
+          await supabase.auth.signOut();
+          window.location.href = '/';
+        }
+      } else {
+        await fetchProfileAndOrg();
+      }
+    } catch (err: any) {
+      alert('Error al salir de la clínica: ' + err.message);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleSwitchClinic = (orgId: string) => {
+    localStorage.setItem('active-tenant-id', orgId);
+    window.location.reload();
   };
 
   useEffect(() => {
@@ -222,7 +349,7 @@ export default function Perfil() {
   return (
     <>
       <Head>
-        <title>PsicoAlivio - Perfil y Configuración</title>
+        <title>PsicFlow - Perfil y Configuración</title>
       </Head>
 
       <div className="space-y-stack-lg">
@@ -627,6 +754,89 @@ export default function Perfil() {
             </div>
           </section>
 
+          {/* Column 5: Workspace Switcher and Clinic Management (12/12 width) */}
+          <section className="col-span-12 bg-surface-container-lowest rounded-xl p-8 shadow-[0px_4px_12px_rgba(0,0,0,0.03)] border border-outline-variant/10 space-y-6">
+            <div className="border-b border-outline-variant/25 pb-4">
+              <h3 className="font-headline-sm text-headline-sm text-on-surface font-bold flex items-center gap-2">
+                <Building2 className="w-5 h-5 text-primary" />
+                <span>Mis Clínicas Asignadas (Multitenancy)</span>
+              </h3>
+              <p className="text-body-sm text-on-surface-variant text-sm mt-1">
+                Visualiza y gestiona las clínicas asociadas a tu cuenta. Puedes alternar tu panel de control clínico o eliminar/salir de ellas según corresponda.
+              </p>
+            </div>
+
+            <div className="overflow-x-auto w-full">
+              <table className="w-full text-left text-sm border-collapse">
+                <thead>
+                  <tr className="border-b border-outline-variant/20 text-on-surface-variant text-xs uppercase font-semibold">
+                    <th className="pb-3 pr-4">Clínica</th>
+                    <th className="pb-3 pr-4">Plan Actual</th>
+                    <th className="pb-3 pr-4">Tu Rol</th>
+                    <th className="pb-3 pr-4 text-center">Estado</th>
+                    <th className="pb-3 text-right">Acciones</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-outline-variant/10">
+                  {userClinics.map((clinicItem: any) => {
+                    const isActive = clinicItem.organization_id === localStorage.getItem('active-tenant-id');
+                    const org = clinicItem.organizations || {};
+                    const isOwner = clinicItem.role_name === 'admin_clinica';
+                    
+                    return (
+                      <tr key={clinicItem.id} className="hover:bg-surface-container-low/30 transition-colors">
+                        <td className="py-4 pr-4 font-bold text-on-surface">{org.name || 'Clínica Sin Nombre'}</td>
+                        <td className="py-4 pr-4">
+                          <span className="px-2 py-0.5 bg-primary/10 text-primary text-[11px] font-bold rounded">
+                            {org.current_plan || 'Starter'}
+                          </span>
+                        </td>
+                        <td className="py-4 pr-4 text-on-surface-variant capitalize text-xs">
+                          {clinicItem.role_name === 'admin_clinica' ? 'Administrador' : clinicItem.role_name}
+                        </td>
+                        <td className="py-4 pr-4 text-center">
+                          {isActive ? (
+                            <span className="inline-flex items-center gap-1 text-xs font-bold text-success">
+                              <span className="w-2 h-2 rounded-full bg-success animate-pulse"></span>
+                              Activa
+                            </span>
+                          ) : (
+                            <span className="text-xs text-text-muted">Inactiva</span>
+                          )}
+                        </td>
+                        <td className="py-4 text-right space-x-2">
+                          {!isActive && (
+                            <button
+                              onClick={() => handleSwitchClinic(clinicItem.organization_id)}
+                              className="px-3 py-1.5 bg-primary text-on-primary hover:bg-primary-container text-xs font-semibold rounded-lg transition-all cursor-pointer"
+                            >
+                              Alternar Clínica
+                            </button>
+                          )}
+                          {isOwner ? (
+                            <button
+                              onClick={() => handleDeleteClinic(clinicItem.organization_id, org.name)}
+                              className="px-3 py-1.5 border border-error/30 text-error hover:bg-error/5 text-xs font-semibold rounded-lg transition-all cursor-pointer"
+                            >
+                              Eliminar Clínica
+                            </button>
+                          ) : (
+                            <button
+                              onClick={() => handleLeaveClinic(clinicItem.id, clinicItem.organization_id, org.name)}
+                              className="px-3 py-1.5 border border-warning/30 text-warning hover:bg-warning/5 text-xs font-semibold rounded-lg transition-all cursor-pointer"
+                            >
+                              Salir
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </section>
+
           {/* Column 5: Danger Zone (12/12 width) */}
           <section className="col-span-12 bg-surface-container-lowest rounded-xl p-8 border border-error/10 shadow-[0px_4px_12px_rgba(0,0,0,0.03)] flex flex-col md:flex-row md:items-center justify-between gap-6">
             <div className="space-y-1">
@@ -649,7 +859,7 @@ export default function Perfil() {
 
         {/* Footer */}
         <footer className="p-8 border-t border-outline-variant/10 text-center text-on-surface-variant font-label-sm text-xs">
-          <p>© 2026 PsicoAlivio Ecosistema de Gestión y Blindaje Psicológico. Encriptación de datos AES-256 e HIPAA Compliant.</p>
+          <p>© 2026 PsicFlow Ecosistema de Gestión y Blindaje Psicológico. Encriptación de datos AES-256 e HIPAA Compliant.</p>
         </footer>
       </div>
     </>

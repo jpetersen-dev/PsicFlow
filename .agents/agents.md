@@ -1,4 +1,4 @@
-# Team Constitution - PsicoAlivio
+# Team Constitution - PsicFlow
 
 This file defines the logical boundaries of the subagents to prevent amnesia during context compaction:
 

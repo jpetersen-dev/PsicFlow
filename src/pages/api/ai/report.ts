@@ -214,5 +214,5 @@ V. RECOMENDACIONES
 
 Profesional Responsable: ${professionalName}
 Fecha: ${today}
-[Firma Digital Validada por PsicoAlivio]`;
+[Firma Digital Validada por PsicFlow]`;
 }

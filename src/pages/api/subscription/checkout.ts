@@ -62,7 +62,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     // 6. Send Onboarding Email via Brevo API
     const brevoApiKey = process.env.BREVO_API_KEY;
-    const brevoSenderEmail = process.env.BREVO_SENDER_EMAIL || 'no-reply@psicoalivio.cl';
+    const brevoSenderEmail = process.env.BREVO_SENDER_EMAIL || 'no-reply@psicflow.cl';
 
     if (!brevoApiKey) {
       console.warn('BREVO_API_KEY is not defined in environment variables. Email dispatch bypassed.');
@@ -75,7 +75,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     const emailBody = {
       sender: {
-        name: 'PsicoAlivio',
+        name: 'PsicFlow',
         email: brevoSenderEmail,
       },
       to: [
@@ -84,13 +84,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           name: full_name.trim(),
         },
       ],
-      subject: `¡Te damos la bienvenida a PsicoAlivio, ${full_name.trim()}!`,
+      subject: `¡Te damos la bienvenida a PsicFlow, ${full_name.trim()}!`,
       htmlContent: `
 <!DOCTYPE html>
 <html>
 <head>
   <meta charset="utf-8">
-  <title>Alta en PsicoAlivio</title>
+  <title>Alta en PsicFlow</title>
   <style>
     body {
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
@@ -152,11 +152,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 <body>
   <div class="container">
     <div class="header">
-      <h1>PsicoAlivio</h1>
+      <h1>PsicFlow</h1>
     </div>
     <div class="content">
       <h2>¡Te damos la bienvenida, ${full_name.trim()}!</h2>
-      <p>Gracias por suscribirte al plan <strong>${plan}</strong> de PsicoAlivio, tu nuevo ecosistema de evolución clínica y gestión profesional.</p>
+      <p>Gracias por suscribirte al plan <strong>${plan}</strong> de PsicFlow, tu nuevo ecosistema de evolución clínica y gestión profesional.</p>
       <p>Hemos configurado tu clínica <strong>${clinic_name.trim()}</strong> en nuestros servidores. Para completar el alta de tu cuenta y comenzar a utilizar la plataforma, haz clic en el siguiente botón:</p>
       
       <div style="text-align: center;">
@@ -169,7 +169,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       <p>Este enlace de activación expirará en 7 días.</p>
     </div>
     <div class="footer">
-      <p>&copy; 2026 PsicoAlivio. Todos los derechos reservados.</p>
+      <p>&copy; 2026 PsicFlow. Todos los derechos reservados.</p>
     </div>
   </div>
 </body>

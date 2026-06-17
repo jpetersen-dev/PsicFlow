@@ -76,17 +76,37 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
 
     const fetchOrganizations = async () => {
       try {
-        const { data, error } = await supabase
-          .from('organizations')
-          .select('id, name, current_plan');
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session?.user?.id) return;
+
+        // Fetch organizations via user profiles to prevent listing RLS-visible invitation clinics
+        const { data: profilesData, error: profilesError } = await supabase
+          .from('profiles')
+          .select(`
+            organization_id,
+            organizations (
+              id,
+              name,
+              current_plan
+            )
+          `)
+          .eq('user_id', session.user.id);
         
-        if (!error && data) {
-          setOrganizations(data);
+        if (!profilesError && profilesData) {
+          // Extract unique organizations from profiles
+          const orgMap = new Map();
+          profilesData.forEach((p: any) => {
+            if (p.organizations) {
+              orgMap.set(p.organizations.id, p.organizations);
+            }
+          });
+          const uniqueOrgs = Array.from(orgMap.values());
+          setOrganizations(uniqueOrgs);
           
           let tenantId = localStorage.getItem('active-tenant-id') || '';
-          if (!tenantId || !data.some(o => o.id === tenantId)) {
-            if (data.length > 0) {
-              const firstId = data[0].id;
+          if (!tenantId || !uniqueOrgs.some(o => o.id === tenantId)) {
+            if (uniqueOrgs.length > 0) {
+              const firstId = uniqueOrgs[0].id;
               localStorage.setItem('active-tenant-id', firstId);
               tenantId = firstId;
             } else {
@@ -196,7 +216,7 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
         <div className="h-16 flex items-center justify-between px-4 border-b border-border-color bg-bg-sidebar">
           <Link href="/dashboard" className="flex items-center gap-2 font-bold text-lg text-accent-primary">
             <Building2 className="w-6 h-6" />
-            <span className={sidebarOpen ? 'block' : 'hidden md:hidden'}>PsicoAlivio</span>
+            <span className={sidebarOpen ? 'block' : 'hidden md:hidden'}>PsicFlow</span>
           </Link>
           <button onClick={() => setSidebarOpen(false)} className="md:hidden text-text-secondary hover:text-text-primary">
             <X className="w-5 h-5" />

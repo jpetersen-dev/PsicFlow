@@ -199,7 +199,7 @@ export const NewClinicModal: React.FC<NewClinicModalProps> = ({ isOpen, onClose,
 
           {/* Informacion de Plan */}
           <div className="bg-primary/5 border border-primary/10 rounded-xl p-4 mt-2">
-            <p className="text-xs font-semibold text-accent-primary">¡Bienvenido a PsicoAlivio!</p>
+            <p className="text-xs font-semibold text-accent-primary">¡Bienvenido a PsicFlow!</p>
             <p className="text-[11px] text-on-surface-variant mt-1 leading-relaxed">
               La nueva clínica se registrará bajo el plan **Starter** y se le abonarán de manera gratuita:
               <br />• **10 Créditos de Notas Clínicas con IA**

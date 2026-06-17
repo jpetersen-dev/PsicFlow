@@ -417,7 +417,7 @@ Fin del Expediente Documental.`;
             ${logoImg}
             <div style="float: left;">
               <h1 class="title">${reportTitle.toUpperCase()}</h1>
-              <p class="subtitle">Ecosistema Clínico PsicoAlivio</p>
+              <p class="subtitle">Ecosistema Clínico PsicFlow</p>
             </div>
           </div>
           
@@ -484,7 +484,9 @@ Fin del Expediente Documental.`;
           <div class="header">
             ${logoHtml}
             <div class="title">${reportTitle.toUpperCase()}</div>
-            <p style="font-size: 9pt; color: #666;">PsicoAlivio Ecosistema Clínico</p>
+            <div style="text-align: right;">
+              <p style="font-size: 9pt; color: #666;">PsicFlow Ecosistema Clínico</p>
+            </div>
           </div>
           
           <div class="content">
@@ -513,7 +515,7 @@ Fin del Expediente Documental.`;
   return (
     <>
       <Head>
-        <title>PsicoAlivio - Centro de Documentación</title>
+        <title>PsicFlow - Centro de Documentación</title>
       </Head>
 
       <div className="space-y-6">

@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Head from 'next/head';
 import Link from 'next/link';
 import { useRouter } from 'next/router';
+import { supabase } from '../lib/supabaseClient';
 import { 
   Building2, 
   Sparkles, 
@@ -78,6 +79,43 @@ export default function LandingPage() {
   const router = useRouter();
   const [selectedPlan, setSelectedPlan] = useState<Plan | null>(null);
   const [checkoutStep, setCheckoutStep] = useState<'idle' | 'form' | 'processing' | 'success'>('idle');
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [userEmail, setUserEmail] = useState('');
+
+  useEffect(() => {
+    const checkSession = async () => {
+      const { data } = await supabase.auth.getSession();
+      if (data.session) {
+        setIsLoggedIn(true);
+        setUserEmail(data.session.user.email || '');
+      }
+    };
+    checkSession();
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (session) {
+        setIsLoggedIn(true);
+        setUserEmail(session.user.email || '');
+      } else {
+        setIsLoggedIn(false);
+        setUserEmail('');
+      }
+    });
+
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, []);
+
+  const handleLogout = async () => {
+    const confirmLogout = confirm('¿Estás seguro de que deseas cerrar sesión?');
+    if (!confirmLogout) return;
+    await supabase.auth.signOut();
+    localStorage.removeItem('active-tenant-id');
+    setIsLoggedIn(false);
+    setUserEmail('');
+    router.push('/');
+  };
   
   // Checkout Form States
   const [fullName, setFullName] = useState('');
@@ -198,7 +236,7 @@ export default function LandingPage() {
   return (
     <>
       <Head>
-        <title>PsicoAlivio - Gestión Clínica Inteligente y Notas SOAP por IA</title>
+        <title>PsicFlow - Gestión Clínica Inteligente y Notas SOAP por IA</title>
         <meta name="description" content="Plataforma SaaS de evolución clínica automatizada por IA para psicólogos y terapeutas." />
       </Head>
 
@@ -212,21 +250,47 @@ export default function LandingPage() {
         <header className="w-full h-16 border-b border-border-color/50 bg-bg-card/70 backdrop-blur-md sticky top-0 z-40 flex items-center justify-between px-6 md:px-12 max-w-[1440px] mx-auto">
           <Link href="/" className="flex items-center gap-2 font-bold text-xl text-accent-primary font-display">
             <Building2 className="w-6 h-6" />
-            <span>PsicoAlivio</span>
+            <span>PsicFlow</span>
           </Link>
           <div className="flex items-center gap-4">
-            <Link 
-              href="/login" 
-              className="text-sm font-semibold text-text-secondary hover:text-accent-primary transition-all"
-            >
-              Acceso Clínico
-            </Link>
-            <a 
-              href="#pricing"
-              className="px-4 py-2 bg-accent-primary hover:bg-accent-hover text-bg-primary rounded-xl text-xs font-bold transition-all shadow-sm"
-            >
-              Suscribirse
-            </a>
+            {isLoggedIn ? (
+              <>
+                <span className="text-xs text-text-secondary font-medium hidden md:inline">{userEmail}</span>
+                <Link 
+                  href="/dashboard" 
+                  className="text-sm font-semibold text-text-secondary hover:text-accent-primary transition-all"
+                >
+                  Ir al Panel
+                </Link>
+                <Link 
+                  href="/perfil" 
+                  className="text-sm font-semibold text-text-secondary hover:text-accent-primary transition-all"
+                >
+                  Mi Cuenta
+                </Link>
+                <button 
+                  onClick={handleLogout}
+                  className="text-sm font-semibold text-danger hover:text-danger/80 transition-all cursor-pointer bg-transparent border-0 p-0"
+                >
+                  Cerrar Sesión
+                </button>
+              </>
+            ) : (
+              <>
+                <Link 
+                  href="/login" 
+                  className="text-sm font-semibold text-text-secondary hover:text-accent-primary transition-all"
+                >
+                  Acceso Clínico
+                </Link>
+                <a 
+                  href="#pricing"
+                  className="px-4 py-2 bg-accent-primary hover:bg-accent-hover text-bg-primary rounded-xl text-xs font-bold transition-all shadow-sm"
+                >
+                  Suscribirse
+                </a>
+              </>
+            )}
           </div>
         </header>
 
@@ -246,19 +310,39 @@ export default function LandingPage() {
               Optimiza tu consulta privada con notas SOAP redactadas por IA, transcripciones por voz, informes clínicos inmediatos y CRM de pacientes. Chilenización fiscal y legal completa en cumplimiento con la Ley N° 21.668.
             </p>
             <div className="pt-4 flex flex-col sm:flex-row justify-center items-center gap-4">
-              <a 
-                href="#pricing"
-                className="px-8 py-3.5 bg-accent-primary hover:bg-accent-hover text-bg-primary rounded-xl text-sm font-bold transition-all shadow-lg flex items-center gap-2 w-full sm:w-auto justify-center"
-              >
-                <span>Ver Planes y Comenzar</span>
-                <ArrowRight className="w-4 h-4" />
-              </a>
-              <Link 
-                href="/login" 
-                className="px-8 py-3.5 bg-bg-card border border-border-color hover:bg-bg-sidebar/40 text-text-primary rounded-xl text-sm font-semibold transition-all w-full sm:w-auto justify-center text-center"
-              >
-                Acceder a mi Cuenta
-              </Link>
+              {isLoggedIn ? (
+                <>
+                  <Link 
+                    href="/dashboard"
+                    className="px-8 py-3.5 bg-accent-primary hover:bg-accent-hover text-bg-primary rounded-xl text-sm font-bold transition-all shadow-lg flex items-center gap-2 w-full sm:w-auto justify-center"
+                  >
+                    <span>Ingresar al Panel</span>
+                    <ArrowRight className="w-4 h-4" />
+                  </Link>
+                  <Link 
+                    href="/perfil" 
+                    className="px-8 py-3.5 bg-bg-card border border-border-color hover:bg-bg-sidebar/40 text-text-primary rounded-xl text-sm font-semibold transition-all w-full sm:w-auto justify-center text-center"
+                  >
+                    Administrar mi Cuenta
+                  </Link>
+                </>
+              ) : (
+                <>
+                  <a 
+                    href="#pricing"
+                    className="px-8 py-3.5 bg-accent-primary hover:bg-accent-hover text-bg-primary rounded-xl text-sm font-bold transition-all shadow-lg flex items-center gap-2 w-full sm:w-auto justify-center"
+                  >
+                    <span>Ver Planes y Comenzar</span>
+                    <ArrowRight className="w-4 h-4" />
+                  </a>
+                  <Link 
+                    href="/login" 
+                    className="px-8 py-3.5 bg-bg-card border border-border-color hover:bg-bg-sidebar/40 text-text-primary rounded-xl text-sm font-semibold transition-all w-full sm:w-auto justify-center text-center"
+                  >
+                    Acceder a mi Cuenta
+                  </Link>
+                </>
+              )}
             </div>
           </section>
 
@@ -361,9 +445,9 @@ export default function LandingPage() {
           <div className="max-w-[1440px] mx-auto px-6 md:px-12 flex flex-col md:flex-row items-center justify-between gap-4 text-xs text-text-muted">
             <div className="flex items-center gap-1.5 font-bold text-accent-primary font-display">
               <Building2 className="w-4 h-4" />
-              <span>PsicoAlivio</span>
+              <span>PsicFlow</span>
             </div>
-            <p>&copy; 2026 PsicoAlivio. Gestión clínica profesional y segura.</p>
+            <p>&copy; 2026 PsicFlow. Gestión clínica profesional y segura.</p>
           </div>
         </footer>
 

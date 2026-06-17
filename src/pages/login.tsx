@@ -98,7 +98,7 @@ export default function Login() {
   return (
     <>
       <Head>
-        <title>PsicoAlivio - Iniciar Sesión</title>
+        <title>PsicFlow - Iniciar Sesión</title>
       </Head>
 
       <div className="w-full max-w-md bg-bg-card border border-border-color rounded-3xl shadow-2xl p-8 space-y-6">
@@ -166,7 +166,7 @@ export default function Login() {
                 <Building2 className="w-8 h-8" />
               </div>
               <h1 className="text-2xl font-bold tracking-tight text-text-primary">Acceso Clínico</h1>
-              <p className="text-sm text-text-secondary">Ingresa a tu ecosistema de gestión PsicoAlivio</p>
+              <p className="text-sm text-text-secondary">Ingresa a tu ecosistema de gestión PsicFlow</p>
             </div>
 
             {error && (

@@ -1,6 +1,6 @@
 # Windsurf Global Behavior & Coding Constraints
 
-This project, **PsicoAlivio**, operates under strict quality and security standards. The following rules are active and must be enforced by all agents:
+This project, **PsicFlow**, operates under strict quality and security standards. The following rules are active and must be enforced by all agents:
 
 ## 1. Strict TypeScript Constraints
 - All Next.js and frontend files must use strict TypeScript.

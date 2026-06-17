@@ -450,7 +450,7 @@ export default function PacienteFicha() {
   return (
     <>
       <Head>
-        <title>PsicoAlivio - Ficha de {patient?.full_name}</title>
+        <title>PsicFlow - Ficha de {patient?.full_name}</title>
       </Head>
 
       <div className="space-y-6">
