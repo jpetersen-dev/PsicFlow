@@ -17,13 +17,19 @@ import {
   X,
   Lock,
   Plus,
-  Wallet
+  Wallet,
+  LogOut,
+  Bell,
+  Settings
 } from 'lucide-react';
 import { supabase } from '../lib/supabaseClient';
 import { NewClinicModal } from './NewClinicModal';
 
 export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const router = useRouter();
+  const noLayoutRoutes = ['/login', '/invitacion'];
+  const isNoLayout = noLayoutRoutes.some(route => router.pathname.startsWith(route)) || router.pathname === '/';
+
   const { isPrivacyMode, togglePrivacyMode } = usePrivacyMode();
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [activeTenant, setActiveTenant] = useState('');
@@ -31,9 +37,43 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
   const [isNewClinicOpen, setIsNewClinicOpen] = useState(false);
   const [credits, setCredits] = useState<{ NOTA_IA: number; INFORME_CLINICO: number }>({ NOTA_IA: 0, INFORME_CLINICO: 0 });
   const [profile, setProfile] = useState<{ full_name: string; role_name: string } | null>(null);
+  const [authChecking, setAuthChecking] = useState(!isNoLayout);
+
+  // Auth session check & listener
+  useEffect(() => {
+    if (isNoLayout) {
+      setAuthChecking(false);
+      return;
+    }
+
+    const checkAuth = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        router.push('/login');
+      } else {
+        setAuthChecking(false);
+      }
+    };
+
+    checkAuth();
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (!session && !isNoLayout) {
+        router.push('/login');
+      } else if (session) {
+        setAuthChecking(false);
+      }
+    });
+
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, [isNoLayout, router]);
 
   // Initialize tenant context and fetch clinics dynamically
   useEffect(() => {
+    if (isNoLayout) return;
+
     const fetchOrganizations = async () => {
       try {
         const { data, error } = await supabase
@@ -61,18 +101,23 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
     };
 
     fetchOrganizations();
-  }, []);
+  }, [isNoLayout]);
 
   // Fetch tenant profile and credits whenever activeTenant changes
   useEffect(() => {
-    if (!activeTenant) return;
+    if (isNoLayout || !activeTenant) return;
 
     const fetchTenantData = async () => {
       try {
-        // Fetch active profile for this tenant
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session?.user?.id) return;
+
+        // Fetch active profile for this tenant and user
         const { data: profileData, error: profileError } = await supabase
           .from('profiles')
           .select('full_name, role_name')
+          .eq('organization_id', activeTenant)
+          .eq('user_id', session.user.id)
           .limit(1)
           .single();
 
@@ -104,7 +149,7 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
     };
 
     fetchTenantData();
-  }, [activeTenant]);
+  }, [activeTenant, isNoLayout]);
 
   const handleTenantChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const newId = e.target.value;
@@ -114,7 +159,7 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
   };
 
   const navItems = [
-    { name: 'Dashboard', href: '/', icon: LayoutDashboard },
+    { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
     { name: 'CRM Pacientes', href: '/pacientes', icon: Users },
     { name: 'Calendario', href: '/calendario', icon: Calendar },
     { name: 'Reportes y Finanzas', href: '/reportes', icon: BarChart3 },
@@ -122,6 +167,23 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
     { name: 'Centro Documentos', href: '/documentos', icon: FileText },
     { name: 'Mi Perfil', href: '/perfil', icon: User }
   ];
+
+  if (authChecking) {
+    return (
+      <div className="min-h-screen bg-bg-primary text-text-primary flex flex-col justify-center items-center gap-4 w-full">
+        <div className="w-8 h-8 rounded-full border-2 border-accent-primary border-t-transparent animate-spin"></div>
+        <p className="text-sm text-text-secondary">Verificando sesión clínica...</p>
+      </div>
+    );
+  }
+
+  if (isNoLayout) {
+    return (
+      <div className="min-h-screen bg-bg-primary text-text-primary flex font-sans w-full justify-center items-center">
+        {children}
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-bg-primary text-text-primary flex font-sans">
@@ -132,7 +194,7 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
       >
         {/* Sidebar Header */}
         <div className="h-16 flex items-center justify-between px-4 border-b border-border-color bg-bg-sidebar">
-          <Link href="/" className="flex items-center gap-2 font-bold text-lg text-accent-primary">
+          <Link href="/dashboard" className="flex items-center gap-2 font-bold text-lg text-accent-primary">
             <Building2 className="w-6 h-6" />
             <span className={sidebarOpen ? 'block' : 'hidden md:hidden'}>PsicoAlivio</span>
           </Link>
@@ -240,16 +302,47 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
               <span>Modo Privacidad</span>
             </button>
 
+            {/* Notifications Bell */}
+            <button
+              className="p-1.5 bg-bg-input border border-border-color hover:bg-bg-card hover:text-accent-primary text-text-secondary rounded-lg transition-all flex items-center justify-center cursor-pointer relative"
+              title="Notificaciones"
+            >
+              <Bell className="w-4 h-4" />
+              <span className="absolute top-1 right-1 w-2 h-2 bg-accent-primary rounded-full"></span>
+            </button>
+
+            {/* Profile/Config Settings Gear */}
+            <button
+              onClick={() => router.push('/perfil')}
+              className="p-1.5 bg-bg-input border border-border-color hover:bg-bg-card hover:text-accent-primary text-text-secondary rounded-lg transition-all flex items-center justify-center cursor-pointer"
+              title="Configuración de Perfil"
+            >
+              <Settings className="w-4 h-4" />
+            </button>
+
             {/* Profile Display */}
             {profile && (
-              <div className="flex items-center gap-3">
-                <div className="w-8 h-8 rounded-full bg-accent-primary/25 border border-accent-primary/35 flex items-center justify-center font-bold text-accent-primary text-sm">
-                  {profile.full_name[0]}
+              <div className="flex items-center gap-3 border-l border-border-color pl-4 ml-1">
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-full bg-accent-primary/25 border border-accent-primary/35 flex items-center justify-center font-bold text-accent-primary text-sm">
+                    {profile.full_name ? profile.full_name[0] : '?'}
+                  </div>
+                  <div className="hidden sm:block text-left">
+                    <p className="text-sm font-semibold text-text-primary leading-none">{profile.full_name}</p>
+                    <p className="text-[10px] text-text-muted capitalize">{profile.role_name.replace('_', ' ')}</p>
+                  </div>
                 </div>
-                <div className="hidden sm:block text-left">
-                  <p className="text-sm font-semibold text-text-primary leading-none">{profile.full_name}</p>
-                  <p className="text-[10px] text-text-muted capitalize">{profile.role_name.replace('_', ' ')}</p>
-                </div>
+                <button
+                  onClick={async () => {
+                    await supabase.auth.signOut();
+                    router.push('/login');
+                  }}
+                  className="p-1.5 bg-bg-input border border-border-color hover:bg-bg-card text-text-secondary hover:text-error rounded-lg transition-all flex items-center justify-center cursor-pointer"
+                  title="Cerrar Sesión"
+                  type="button"
+                >
+                  <LogOut className="w-4 h-4" />
+                </button>
               </div>
             )}
           </div>

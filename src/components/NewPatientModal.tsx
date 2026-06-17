@@ -22,7 +22,7 @@ export const NewPatientModal: React.FC<NewPatientModalProps> = ({ isOpen, onClos
     occupation: '',
     marital_status: 'Soltero/a',
     education_level: 'Básica',
-    education_status: 'Completo',
+    education_status: 'Primero Básico',
     education_institution: '',
     health_system: 'Fonasa',
     phone: '',
@@ -34,8 +34,35 @@ export const NewPatientModal: React.FC<NewPatientModalProps> = ({ isOpen, onClos
     emergency_contact_phone: '',
     emergency_contact_relationship: '',
     emergency_contact_email: '',
-    status: 'activo'
+    status: 'activo',
+    nacionalidad: 'Chilena',
+    pais_origen: 'Chile',
+    en_observacion: false,
+    observacion_comentario: '',
+    observaciones_generales: ''
   });
+
+  const [addressSuggestions, setAddressSuggestions] = useState<any[]>([]);
+  const [isSearchingAddress, setIsSearchingAddress] = useState(false);
+
+  const fetchAddressSuggestions = async (query: string) => {
+    if (!query || query.length < 3) {
+      setAddressSuggestions([]);
+      return;
+    }
+    setIsSearchingAddress(true);
+    try {
+      const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&addressdetails=1&countrycodes=cl&limit=5`);
+      if (res.ok) {
+        const data = await res.json();
+        setAddressSuggestions(data || []);
+      }
+    } catch (err) {
+      console.error('Error fetching address suggestions:', err);
+    } finally {
+      setIsSearchingAddress(false);
+    }
+  };
 
   if (!isOpen) return null;
 
@@ -145,6 +172,22 @@ export const NewPatientModal: React.FC<NewPatientModalProps> = ({ isOpen, onClos
             <h3 className="text-sm font-semibold text-accent-primary border-b border-border-color pb-1">1. Identificación Core</h3>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div>
+                <label className="block text-xs text-text-secondary mb-1 font-medium">Nacionalidad</label>
+                <input 
+                  type="text" name="nacionalidad" value={formData.nacionalidad} onChange={handleChange}
+                  className="w-full bg-bg-input border border-border-color rounded-lg px-3 py-2 text-sm text-text-primary focus:border-border-focus focus:outline-none"
+                  placeholder="e.g. Chilena"
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-text-secondary mb-1 font-medium">País de Origen</label>
+                <input 
+                  type="text" name="pais_origen" value={formData.pais_origen} onChange={handleChange}
+                  className="w-full bg-bg-input border border-border-color rounded-lg px-3 py-2 text-sm text-text-primary focus:border-border-focus focus:outline-none"
+                  placeholder="e.g. Chile"
+                />
+              </div>
+              <div>
                 <label className="block text-xs text-text-secondary mb-1 font-medium">Nombre Completo *</label>
                 <input 
                   type="text" required name="full_name" value={formData.full_name} onChange={handleChange}
@@ -232,13 +275,25 @@ export const NewPatientModal: React.FC<NewPatientModalProps> = ({ isOpen, onClos
                   name="education_status" value={formData.education_status} onChange={handleChange}
                   className="w-full bg-bg-input border border-border-color rounded-lg px-3 py-2 text-sm text-text-primary focus:border-border-focus focus:outline-none"
                 >
-                  <option value="NT1">NT1</option>
-                  <option value="NT2">NT2</option>
-                  <option value="1ro a 8vo básico">1ro a 8vo básico</option>
-                  <option value="1ro a 4to medio">1ro a 4to medio</option>
-                  <option value="En curso">En curso</option>
-                  <option value="Incompleto">Incompleto</option>
-                  <option value="Completo">Completo</option>
+                  <option value="Sala Cuna">Sala Cuna</option>
+                  <option value="Jardín Infantil">Jardín Infantil</option>
+                  <option value="Pre-Kinder (NT1)">Pre-Kinder (NT1)</option>
+                  <option value="Kinder (NT2)">Kinder (NT2)</option>
+                  <option value="Primero Básico">Primero Básico</option>
+                  <option value="Segundo Básico">Segundo Básico</option>
+                  <option value="Tercero Básico">Tercero Básico</option>
+                  <option value="Cuarto Básico">Cuarto Básico</option>
+                  <option value="Quinto Básico">Quinto Básico</option>
+                  <option value="Sexto Básico">Sexto Básico</option>
+                  <option value="Séptimo Básico">Séptimo Básico</option>
+                  <option value="Octavo Básico">Octavo Básico</option>
+                  <option value="Primero Medio">Primero Medio</option>
+                  <option value="Segundo Medio">Segundo Medio</option>
+                  <option value="Tercero Medio">Tercero Medio</option>
+                  <option value="Cuarto Medio">Cuarto Medio</option>
+                  <option value="Superior En curso">Superior En curso</option>
+                  <option value="Superior Incompleto">Superior Incompleto</option>
+                  <option value="Superior Completo">Superior Completo</option>
                 </select>
               </div>
               <div>
@@ -288,12 +343,44 @@ export const NewPatientModal: React.FC<NewPatientModalProps> = ({ isOpen, onClos
                   className="w-full bg-bg-input border border-border-color rounded-lg px-3 py-2 text-sm text-text-primary focus:border-border-focus focus:outline-none"
                 />
               </div>
-              <div>
+              <div className="relative">
                 <label className="block text-xs text-text-secondary mb-1 font-medium">Dirección (Calle y N°)</label>
                 <input 
-                  type="text" name="address" value={formData.address} onChange={handleChange}
+                  type="text" name="address" autoComplete="off"
+                  value={formData.address} 
+                  onChange={(e) => {
+                    handleChange(e);
+                    fetchAddressSuggestions(e.target.value);
+                  }}
                   className="w-full bg-bg-input border border-border-color rounded-lg px-3 py-2 text-sm text-text-primary focus:border-border-focus focus:outline-none"
                 />
+                {isSearchingAddress && <p className="text-[10px] text-text-muted mt-1">Buscando direcciones...</p>}
+                {addressSuggestions.length > 0 && (
+                  <ul className="absolute z-50 bg-bg-card border border-border-color rounded-lg mt-1 w-full max-h-40 overflow-y-auto shadow-lg text-xs divide-y divide-border-color">
+                    {addressSuggestions.map((sug, i) => (
+                      <li 
+                        key={i} 
+                        onClick={() => {
+                          const road = sug.address?.road || '';
+                          const num = sug.address?.house_number || '';
+                          const streetAddress = `${road} ${num}`.trim() || sug.display_name.split(',')[0];
+                          const comuna = sug.address?.city || sug.address?.town || sug.address?.suburb || sug.address?.village || '';
+                          const region = sug.address?.state || '';
+                          setFormData(prev => ({
+                            ...prev,
+                            address: streetAddress,
+                            comuna: comuna,
+                            region: region
+                          }));
+                          setAddressSuggestions([]);
+                        }}
+                        className="p-2 hover:bg-bg-input/60 cursor-pointer text-text-primary"
+                      >
+                        {sug.display_name}
+                      </li>
+                    ))}
+                  </ul>
+                )}
               </div>
               <div>
                 <label className="block text-xs text-text-secondary mb-1 font-medium">Comuna</label>
@@ -344,6 +431,22 @@ export const NewPatientModal: React.FC<NewPatientModalProps> = ({ isOpen, onClos
                   className="w-full bg-bg-input border border-border-color rounded-lg px-3 py-2 text-sm text-text-primary focus:border-border-focus focus:outline-none"
                 />
               </div>
+            </div>
+          </div>
+
+          {/* Section 5: Observaciones Generales */}
+          <div className="space-y-4">
+            <h3 className="text-sm font-semibold text-accent-primary border-b border-border-color pb-1">5. Observaciones Generales</h3>
+            <div>
+              <label className="block text-xs text-text-secondary mb-1 font-medium">Observaciones Generales</label>
+              <textarea 
+                name="observaciones_generales" 
+                value={formData.observaciones_generales} 
+                onChange={handleChange}
+                rows={3}
+                placeholder="Detalles adicionales, observaciones del paciente, notas de contacto..."
+                className="w-full bg-bg-input border border-border-color rounded-lg px-3 py-2 text-sm text-text-primary focus:border-border-focus focus:outline-none resize-y"
+              />
             </div>
           </div>
         </div>

@@ -60,6 +60,11 @@ export const NewClinicModal: React.FC<NewClinicModalProps> = ({ isOpen, onClose,
       
       const newOrgId = orgData.id;
 
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.user?.id) {
+        throw new Error('Sesión de usuario no encontrada.');
+      }
+
       // 2. Create Profile linked to the organization
       const { data: profData, error: profErr } = await supabase
         .from('profiles')
@@ -67,7 +72,9 @@ export const NewClinicModal: React.FC<NewClinicModalProps> = ({ isOpen, onClose,
           organization_id: newOrgId,
           rut_professional: cleanedRut,
           full_name: formData.profName.trim(),
-          role_name: 'admin_clinica'
+          role_name: 'admin_clinica',
+          user_id: session.user.id,
+          email: session.user.email
         })
         .select('id')
         .single();

@@ -35,16 +35,38 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       global: { headers: { 'x-tenant-id': tenantId } },
     });
 
-    // 1. Resolve professional profile for this tenant
-    const { data: profiles, error: profileErr } = await supabase
-      .from('profiles')
-      .select('id')
-      .limit(1);
+    // 1. Resolve professional profile using Authorization header if present
+    const authHeader = req.headers.authorization;
+    let profileId: string | null = null;
 
-    if (profileErr || !profiles || profiles.length === 0) {
-      return res.status(404).json({ error: 'No se encontró un perfil profesional para esta organización.' });
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      const token = authHeader.substring(7);
+      const { data: { user }, error: userErr } = await supabase.auth.getUser(token);
+      if (!userErr && user) {
+        const { data: profiles } = await supabase
+          .from('profiles')
+          .select('id')
+          .eq('user_id', user.id)
+          .eq('organization_id', tenantId)
+          .limit(1);
+        if (profiles && profiles.length > 0) {
+          profileId = profiles[0].id;
+        }
+      }
     }
-    const profileId = profiles[0].id;
+
+    if (!profileId) {
+      // Fallback for compatibility/demo
+      const { data: profiles, error: profileErr } = await supabase
+        .from('profiles')
+        .select('id')
+        .limit(1);
+
+      if (profileErr || !profiles || profiles.length === 0) {
+        return res.status(404).json({ error: 'No se encontró un perfil profesional para esta organización.' });
+      }
+      profileId = profiles[0].id;
+    }
 
     // 2. Validate credit balance for NOTA_IA
     const { data: ledgerData, error: ledgerErr } = await supabase

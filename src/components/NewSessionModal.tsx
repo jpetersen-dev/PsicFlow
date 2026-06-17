@@ -52,10 +52,17 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({ isOpen, onClos
         throw new Error('No se detectó una clínica activa. Por favor selecciona una en el header.');
       }
 
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.user?.id) {
+        throw new Error('Sesión de usuario no encontrada. Inicia sesión de nuevo.');
+      }
+
       // Fetch active profile for the professional_id
       const { data: profData, error: profErr } = await supabase
         .from('profiles')
         .select('id, full_name')
+        .eq('user_id', session.user.id)
+        .eq('organization_id', activeTenant)
         .limit(1)
         .single();
       

@@ -14,6 +14,7 @@ import {
   Lightbulb,
   FileSpreadsheet
 } from 'lucide-react';
+import * as XLSX from 'xlsx';
 import { supabase } from '../lib/supabaseClient';
 import { usePrivacyMode } from '../components/PrivacyModeProvider';
 import { NewPatientModal } from '../components/NewPatientModal';
@@ -134,32 +135,163 @@ export default function Pacientes() {
     setCurrentPage(1); // Reset to first page when filters change
   }, [search, statusFilter, sortOrder, patients]);
 
-  const handleExportCSV = () => {
+  const validateRut = (rut: string): boolean => {
+    if (!rut || typeof rut !== 'string') return false;
+    const clean = rut.replace(/[^0-9kK]/g, '');
+    if (clean.length < 8 || clean.length > 9) return false;
+    const body = clean.slice(0, -1);
+    const dv = clean.slice(-1).toUpperCase();
+    
+    let sum = 0;
+    let multiplier = 2;
+    for (let i = body.length - 1; i >= 0; i--) {
+      sum += parseInt(body[i]) * multiplier;
+      multiplier = multiplier === 7 ? 2 : multiplier + 1;
+    }
+    
+    const expectedDv = 11 - (sum % 11);
+    let expectedDvStr = '';
+    if (expectedDv === 11) expectedDvStr = '0';
+    else if (expectedDv === 10) expectedDvStr = 'K';
+    else expectedDvStr = String(expectedDv);
+    
+    return expectedDvStr === dv;
+  };
+
+  const handleExportExcel = () => {
     if (filteredPatients.length === 0) return;
     
-    const headers = ['Ficha ID', 'RUT', 'Nombre Completo', 'Fecha Ingreso', 'Teléfono', 'Email', 'Sistema de Salud', 'Escolaridad', 'Estado'];
-    const rows = filteredPatients.map(p => [
-      p.ficha_id_num,
-      p.rut_patient || 'N/A',
-      p.full_name,
-      p.created_at.split('T')[0],
-      p.phone || '',
-      p.email || '',
-      p.health_system || '',
-      `${p.education_level || ''} (${p.education_status || ''})`,
-      p.status
-    ]);
+    const data = filteredPatients.map(p => ({
+      'ID Ficha': p.ficha_id_num,
+      'RUT': p.rut_patient || 'N/A',
+      'Nombre Completo': p.full_name,
+      'Fecha Ingreso': p.created_at?.split('T')[0] || '',
+      'Teléfono': p.phone || '',
+      'Email': p.email || '',
+      'Sistema de Salud': p.health_system || '',
+      'Escolaridad': p.education_level || '',
+      'Estado Escolaridad': p.education_status || '',
+      'Estado': p.status
+    }));
 
-    const csvContent = "data:text/csv;charset=utf-8,\uFEFF" 
-      + [headers.join(','), ...rows.map(e => e.map(val => `"${String(val).replace(/"/g, '""')}"`).join(','))].join('\n');
-    
-    const encodedUri = encodeURI(csvContent);
-    const link = document.createElement("a");
-    link.setAttribute("href", encodedUri);
-    link.setAttribute("download", `psicoalivio_crm_pacientes_${new Date().toISOString().split('T')[0]}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    const worksheet = XLSX.utils.json_to_sheet(data);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Pacientes');
+
+    XLSX.writeFile(workbook, `psicoalivio_crm_pacientes_${new Date().toISOString().split('T')[0]}.xlsx`);
+  };
+
+  const handleImportExcel = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = async (evt) => {
+      try {
+        const data = evt.target?.result;
+        if (!data) throw new Error('No se pudo leer el archivo.');
+        
+        const workbook = XLSX.read(data, { type: 'binary' });
+        const sheetName = workbook.SheetNames[0];
+        const sheet = workbook.Sheets[sheetName];
+        const rows = XLSX.utils.sheet_to_json(sheet);
+
+        if (rows.length === 0) {
+          alert('El archivo Excel está vacío.');
+          return;
+        }
+
+        const tenantId = localStorage.getItem('active-tenant-id');
+        if (!tenantId) {
+          alert('No hay clínica activa seleccionada.');
+          return;
+        }
+
+        const validPatients: any[] = [];
+        const errors: string[] = [];
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+        rows.forEach((row: any, idx: number) => {
+          const rowNum = idx + 2;
+          const fullName = row['Nombre Completo'] || row['nombre_completo'] || row['Nombre'] || '';
+          let rut = row['RUT'] || row['rut'] || '';
+          const email = row['Email'] || row['email'] || '';
+          const phone = row['Teléfono'] || row['telefono'] || row['Celular'] || '';
+          const gender = row['Género'] || row['genero'] || row['Sexo'] || '';
+          const maritalStatus = row['Estado Civil'] || row['estado_civil'] || '';
+          const occupation = row['Ocupación'] || row['ocupacion'] || '';
+          const healthSystem = row['Sistema de Salud'] || row['sistema_salud'] || '';
+          const educationLevel = row['Nivel Educacional'] || row['nivel_educacional'] || '';
+          const educationStatus = row['Estado Educacional'] || row['estado_educacional'] || '';
+          const address = row['Dirección'] || row['direccion'] || '';
+          const comuna = row['Comuna'] || row['comuna'] || '';
+          const region = row['Región'] || row['region'] || '';
+          const nacionalidad = row['Nacionalidad'] || row['nacionalidad'] || '';
+          const paisOrigen = row['País de Origen'] || row['pais_origen'] || '';
+
+          if (!String(fullName).trim()) {
+            errors.push(`Fila ${rowNum}: El 'Nombre Completo' es obligatorio.`);
+            return;
+          }
+
+          rut = String(rut).trim();
+          if (!rut || rut === 'undefined') {
+            errors.push(`Fila ${rowNum}: El 'RUT' es obligatorio.`);
+            return;
+          }
+          if (!validateRut(rut)) {
+            errors.push(`Fila ${rowNum}: RUT '${rut}' inválido (debe cumplir algoritmo módulo 11).`);
+            return;
+          }
+
+          const cleanRutStr = rut.replace(/\./g, '').replace(/ /g, '').replace(/-/g, '');
+          const formattedRut = cleanRutStr.slice(0, -1) + '-' + cleanRutStr.slice(-1).toUpperCase();
+
+          if (email && !emailRegex.test(String(email).trim())) {
+            errors.push(`Fila ${rowNum}: Correo electrónico '${email}' tiene formato inválido.`);
+            return;
+          }
+
+          validPatients.push({
+            organization_id: tenantId,
+            full_name: String(fullName).trim(),
+            rut_patient: formattedRut,
+            email: email ? String(email).trim().toLowerCase() : null,
+            phone: phone ? String(phone).trim() : null,
+            gender: gender ? String(gender).trim() : null,
+            marital_status: maritalStatus ? String(maritalStatus).trim() : null,
+            occupation: occupation ? String(occupation).trim() : null,
+            health_system: healthSystem ? String(healthSystem).trim() : null,
+            education_level: educationLevel ? String(educationLevel).trim() : null,
+            education_status: educationStatus ? String(educationStatus).trim() : null,
+            address: address ? String(address).trim() : null,
+            comuna: comuna ? String(comuna).trim() : null,
+            region: region ? String(region).trim() : null,
+            nacionalidad: nacionalidad ? String(nacionalidad).trim() : null,
+            pais_origen: paisOrigen ? String(paisOrigen).trim() : null,
+            status: 'activo'
+          });
+        });
+
+        if (errors.length > 0) {
+          alert(`No se pudo realizar la importación debido a los siguientes errores de validación:\n\n${errors.slice(0, 10).join('\n')}${errors.length > 10 ? `\n...y ${errors.length - 10} errores más` : ''}`);
+          return;
+        }
+
+        const { error: dbErr } = await supabase
+          .from('patients')
+          .insert(validPatients);
+
+        if (dbErr) throw dbErr;
+
+        alert(`¡Importación exitosa! Se han agregado ${validPatients.length} pacientes.`);
+        fetchPatients();
+      } catch (err: any) {
+        alert('Error al procesar la importación: ' + err.message);
+      }
+    };
+    reader.readAsBinaryString(file);
+    e.target.value = '';
   };
 
   // Get current page items
@@ -446,19 +578,32 @@ export default function Pacientes() {
 
           <div className="bg-secondary-container/10 p-6 rounded-2xl border border-secondary/20 flex flex-col justify-between">
             <div>
-              <h4 className="font-label-md text-label-md text-secondary font-bold uppercase tracking-wider">Acción Administrativa</h4>
+              <h4 className="font-label-md text-label-md text-secondary font-bold uppercase tracking-wider">Acciones Administrativas</h4>
               <p className="font-body-sm text-body-sm text-on-surface-variant mt-2 leading-relaxed">
-                Exporta el padrón demográfico consolidado de pacientes en formato compatible para auditorías clínicas.
+                Exporta la lista de pacientes filtrada en formato Excel, o importa pacientes de forma masiva desde una planilla `.xlsx`.
               </p>
             </div>
-            <button 
-              onClick={handleExportCSV}
-              disabled={filteredPatients.length === 0}
-              className="mt-4 w-full flex items-center justify-center gap-2 border border-secondary text-secondary py-2.5 rounded-lg font-label-md hover:bg-secondary/5 transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              <FileSpreadsheet className="w-4 h-4" />
-              <span>Descargar base CSV</span>
-            </button>
+            <div className="mt-4 space-y-2">
+              <button 
+                onClick={handleExportExcel}
+                disabled={filteredPatients.length === 0}
+                className="w-full flex items-center justify-center gap-2 bg-secondary text-white py-2.5 rounded-lg font-label-md hover:bg-secondary/90 transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed text-xs font-semibold"
+              >
+                <Download className="w-4 h-4" />
+                <span>Exportar a Excel (.xlsx)</span>
+              </button>
+
+              <label className="w-full flex items-center justify-center gap-2 border border-secondary text-secondary py-2.5 rounded-lg font-label-md hover:bg-secondary/5 transition-all cursor-pointer text-xs font-semibold text-center">
+                <FileSpreadsheet className="w-4 h-4" />
+                <span>Importar de Excel (.xlsx)</span>
+                <input 
+                  type="file" 
+                  accept=".xlsx" 
+                  onChange={handleImportExcel} 
+                  className="hidden" 
+                />
+              </label>
+            </div>
           </div>
         </div>
       </div>

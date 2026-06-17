@@ -24,10 +24,13 @@ export default function Perfil() {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
 
-  // Form states (pre-populated with mock settings)
-  const [specialization, setSpecialization] = useState('Cognitive Behavioral Therapy (CBT)');
-  const [experience, setExperience] = useState(12);
-  const [bio, setBio] = useState('Especialista certificado en terapia breve, resolución de traumas y terapia cognitivo-conductual centrada en la baja carga cognitiva y el bienestar del profesional terapéutico.');
+  // Form states
+  const [fullName, setFullName] = useState('');
+  const [username, setUsername] = useState('');
+  const [email, setEmail] = useState('');
+  const [specialization, setSpecialization] = useState('');
+  const [experience, setExperience] = useState<number>(0);
+  const [bio, setBio] = useState('');
   
   // Toggles states
   const [notifyInquiries, setNotifyInquiries] = useState(true);
@@ -76,10 +79,16 @@ export default function Perfil() {
     alert(`[Previsualización Pública]\n\nNombre: ${profile?.full_name || 'Terapeuta'}\nEspecialidad: ${specialization}\nExperiencia: ${experience} años\nBiografía: ${bio}`);
   };
 
-  const handleChangePassword = () => {
-    const pass = prompt('Ingresa tu nueva contraseña:');
+  const handleChangePassword = async () => {
+    const pass = prompt('Ingresa tu nueva contraseña (mínimo 6 caracteres):');
     if (pass) {
-      alert('Contraseña actualizada correctamente.');
+      try {
+        const { error } = await supabase.auth.updateUser({ password: pass });
+        if (error) throw error;
+        alert('Contraseña actualizada correctamente.');
+      } catch (err: any) {
+        alert('Error al actualizar contraseña: ' + err.message);
+      }
     }
   };
 
@@ -94,30 +103,47 @@ export default function Perfil() {
     setLoading(true);
     try {
       const activeTenant = localStorage.getItem('active-tenant-id');
-      if (!activeTenant) return;
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      if (!activeTenant || !session?.user?.id) {
+        setLoading(false);
+        return;
+      }
 
       // Get profile
-      const { data: profData } = await supabase
+      const { data: profData, error: profError } = await supabase
         .from('profiles')
         .select('*')
+        .eq('user_id', session.user.id)
+        .eq('organization_id', activeTenant)
         .limit(1)
         .single();
       
-      if (profData) {
+      if (profError) {
+        console.error('Error fetching profile:', profError);
+      } else if (profData) {
         setProfile(profData);
+        setFullName(profData.full_name || '');
+        setUsername(profData.username || '');
+        setEmail(profData.email || '');
         if (profData.specialization) setSpecialization(profData.specialization);
         if (profData.experience !== undefined && profData.experience !== null) setExperience(profData.experience);
         if (profData.bio) setBio(profData.bio);
       }
 
       // Get organization details
-      const { data: orgData } = await supabase
+      const { data: orgData, error: orgError } = await supabase
         .from('organizations')
         .select('*')
+        .eq('id', activeTenant)
         .limit(1)
         .single();
       
-      if (orgData) setOrganization(orgData);
+      if (orgError) {
+        console.error('Error fetching organization:', orgError);
+      } else if (orgData) {
+        setOrganization(orgData);
+      }
 
     } catch (err) {
       console.error(err);
@@ -171,6 +197,9 @@ export default function Perfil() {
       const { error } = await supabase
         .from('profiles')
         .update({
+          full_name: fullName.trim(),
+          username: username.trim().toLowerCase(),
+          email: email.trim().toLowerCase(),
           specialization,
           experience: Number(experience),
           bio
@@ -178,7 +207,7 @@ export default function Perfil() {
         .eq('id', profile.id);
 
       if (error) throw error;
-      alert('Credenciales y detalles profesionales guardados exitosamente.');
+      alert('Datos de perfil guardados exitosamente.');
       
       await fetchProfileAndOrg();
     } catch (err: any) {
@@ -233,7 +262,7 @@ export default function Perfil() {
               </div>
 
               <h3 className="font-headline-md text-headline-md text-on-surface font-bold mb-1">
-                {profile ? profile.full_name : 'Dr. García'}
+                {profile ? profile.full_name : 'Cargando...'}
               </h3>
               <p className="font-body-md text-on-surface-variant mb-6 text-sm">
                 RUT: {profile ? profile.rut_professional : 'N/A'}
@@ -277,49 +306,186 @@ export default function Perfil() {
             </div>
 
             <form onSubmit={handleSaveProfessionalDetails} className="space-y-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="space-y-2">
-                  <label className="font-label-md text-on-surface-variant text-xs">Especialidad Principal</label>
-                  <select 
-                    value={specialization}
-                    onChange={(e) => setSpecialization(e.target.value)}
-                    className="w-full bg-surface-container-low border border-outline-variant/20 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary/20 focus:outline-none"
-                  >
-                    <option>Cognitive Behavioral Therapy (CBT)</option>
-                    <option>EMDR Therapy</option>
-                    <option>Family &amp; Marriage Counseling</option>
-                    <option>Child Psychology</option>
-                  </select>
+              {/* Datos Personales */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pb-4 border-b border-outline-variant/10">
+                <div className="space-y-2 col-span-1 md:col-span-2">
+                  <h4 className="text-xs font-bold text-primary tracking-wide uppercase">Datos Personales</h4>
                 </div>
                 <div className="space-y-2">
-                  <label className="font-label-md text-on-surface-variant text-xs">Años de Experiencia</label>
+                  <label className="font-label-md text-on-surface-variant text-xs">Nombre Completo</label>
                   <input 
-                    type="number" 
-                    value={experience}
-                    onChange={(e) => setExperience(Number(e.target.value))}
+                    type="text" 
+                    required
+                    value={fullName}
+                    onChange={(e) => setFullName(e.target.value)}
+                    placeholder="e.g. Jonathan Petersen"
+                    className="w-full bg-surface-container-low border border-outline-variant/20 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary/20 focus:outline-none" 
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="font-label-md text-on-surface-variant text-xs">RUT Profesional (No editable)</label>
+                  <input 
+                    type="text" 
+                    disabled
+                    value={profile ? profile.rut_professional : 'N/A'}
+                    className="w-full bg-surface-container-low/50 border border-outline-variant/15 rounded-lg px-3 py-2 text-sm text-on-surface-variant cursor-not-allowed" 
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="font-label-md text-on-surface-variant text-xs">Nombre de Usuario</label>
+                  <input 
+                    type="text" 
+                    required
+                    value={username}
+                    onChange={(e) => setUsername(e.target.value)}
+                    placeholder="e.g. jpetersen"
+                    className="w-full bg-surface-container-low border border-outline-variant/20 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary/20 focus:outline-none" 
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="font-label-md text-on-surface-variant text-xs">Correo Electrónico</label>
+                  <input 
+                    type="email" 
+                    required
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="e.g. jpetersen@clinica.cl"
                     className="w-full bg-surface-container-low border border-outline-variant/20 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary/20 focus:outline-none" 
                   />
                 </div>
               </div>
 
-              <div className="space-y-2">
-                <label className="font-label-md text-on-surface-variant text-xs">Biografía Profesional</label>
-                <textarea 
-                  value={bio}
-                  onChange={(e) => setBio(e.target.value)}
-                  className="w-full bg-surface-container-low border border-outline-variant/20 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary/20 focus:outline-none h-28 resize-none" 
-                ></textarea>
-                <p className="text-[10px] text-on-surface-variant text-right">Firma clínica digital activa.</p>
-              </div>
+              {/* Datos Clínicos y Profesionales */}
+              <div className="space-y-6 pt-2">
+                <h4 className="text-xs font-bold text-primary tracking-wide uppercase">Detalles Clínicos</h4>
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="space-y-2">
+                    <label className="font-label-md text-on-surface-variant text-xs">Especialidad Principal</label>
+                    <input 
+                      type="text" 
+                      value={specialization}
+                      onChange={(e) => setSpecialization(e.target.value)}
+                      placeholder="e.g. Terapia Cognitivo-Conductual (TCC)"
+                      className="w-full bg-surface-container-low border border-outline-variant/20 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary/20 focus:outline-none"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="font-label-md text-on-surface-variant text-xs">Años de Experiencia</label>
+                    <input 
+                      type="number" 
+                      value={experience}
+                      onChange={(e) => setExperience(Number(e.target.value))}
+                      className="w-full bg-surface-container-low border border-outline-variant/20 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary/20 focus:outline-none" 
+                    />
+                  </div>
+                </div>
 
-              <div className="space-y-2">
-                <label className="font-label-md text-on-surface-variant text-xs">Clínica Asociada (Tenant Actual)</label>
-                <input 
-                  type="text" 
-                  disabled
-                  value={organization ? organization.name : 'San Francisco Wellness Center'} 
-                  className="w-full bg-surface-container-low/50 border border-outline-variant/15 rounded-lg px-3 py-2 text-sm text-on-surface-variant cursor-not-allowed" 
-                />
+                <div className="space-y-2">
+                  <label className="font-label-md text-on-surface-variant text-xs">Biografía Profesional</label>
+                  <textarea 
+                    value={bio}
+                    onChange={(e) => setBio(e.target.value)}
+                    className="w-full bg-surface-container-low border border-outline-variant/20 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary/20 focus:outline-none h-28 resize-none" 
+                  ></textarea>
+                  <p className="text-[10px] text-on-surface-variant text-right">Firma clínica digital activa.</p>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="space-y-2">
+                    <label className="font-label-md text-on-surface-variant text-xs font-semibold block">Logo de la Clínica</label>
+                    <div className="flex items-center gap-4">
+                      {profile?.logo_url ? (
+                        <img src={profile.logo_url} alt="Logo" className="w-16 h-16 object-contain border border-outline-variant/20 rounded bg-white p-1" />
+                      ) : (
+                        <div className="w-16 h-16 bg-surface-container-low border border-outline-variant/20 rounded flex items-center justify-center text-[10px] text-on-surface-variant">Sin Logo</div>
+                      )}
+                      <input 
+                        type="file" 
+                        accept="image/*"
+                        onChange={async (e) => {
+                          const file = e.target.files?.[0];
+                          if (!file) return;
+                          try {
+                            const ext = file.name.split('.').pop();
+                            const path = `logos-signatures/${profile.id}_logo.${ext}`;
+                            const { error: uploadErr } = await supabase.storage
+                              .from('clinical-vault')
+                              .upload(path, file, { upsert: true });
+                            if (uploadErr) throw uploadErr;
+                            
+                            const { data } = supabase.storage.from('clinical-vault').getPublicUrl(path);
+                            const url = data.publicUrl;
+                            
+                            const { error: updateErr } = await supabase
+                              .from('profiles')
+                              .update({ logo_url: url })
+                              .eq('id', profile.id);
+                            if (updateErr) throw updateErr;
+                            
+                            alert('Logo clínico subido y actualizado con éxito.');
+                            await fetchProfileAndOrg();
+                          } catch (err: any) {
+                            alert('Error al subir logo: ' + err.message);
+                          }
+                        }}
+                        className="text-xs text-on-surface-variant file:mr-4 file:py-1.5 file:px-3 file:rounded-md file:border-0 file:text-xs file:font-semibold file:bg-primary/10 file:text-primary hover:file:bg-primary/20"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="font-label-md text-on-surface-variant text-xs font-semibold block">Firma Digital del Terapeuta</label>
+                    <div className="flex items-center gap-4">
+                      {profile?.signature_url ? (
+                        <img src={profile.signature_url} alt="Firma" className="w-16 h-16 object-contain border border-outline-variant/20 rounded bg-white p-1" />
+                      ) : (
+                        <div className="w-16 h-16 bg-surface-container-low border border-outline-variant/20 rounded flex items-center justify-center text-[10px] text-on-surface-variant">Sin Firma</div>
+                      )}
+                      <input 
+                        type="file" 
+                        accept="image/*"
+                        onChange={async (e) => {
+                          const file = e.target.files?.[0];
+                          if (!file) return;
+                          try {
+                            const ext = file.name.split('.').pop();
+                            const path = `logos-signatures/${profile.id}_signature.${ext}`;
+                            const { error: uploadErr } = await supabase.storage
+                              .from('clinical-vault')
+                              .upload(path, file, { upsert: true });
+                            if (uploadErr) throw uploadErr;
+                            
+                            const { data } = supabase.storage.from('clinical-vault').getPublicUrl(path);
+                            const url = data.publicUrl;
+                            
+                            const { error: updateErr } = await supabase
+                              .from('profiles')
+                              .update({ signature_url: url })
+                              .eq('id', profile.id);
+                            if (updateErr) throw updateErr;
+                            
+                            alert('Firma digital subida y actualizada con éxito.');
+                            await fetchProfileAndOrg();
+                          } catch (err: any) {
+                            alert('Error al subir firma: ' + err.message);
+                          }
+                        }}
+                        className="text-xs text-on-surface-variant file:mr-4 file:py-1.5 file:px-3 file:rounded-md file:border-0 file:text-xs file:font-semibold file:bg-primary/10 file:text-primary hover:file:bg-primary/20"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="font-label-md text-on-surface-variant text-xs">Clínica Asociada (Tenant Actual)</label>
+                  <input 
+                    type="text" 
+                    disabled
+                    value={organization ? organization.name : 'Cargando clínica...'} 
+                    className="w-full bg-surface-container-low/50 border border-outline-variant/15 rounded-lg px-3 py-2 text-sm text-on-surface-variant cursor-not-allowed" 
+                  />
+                </div>
               </div>
 
               <div className="flex justify-end pt-4 border-t border-outline-variant/15">

@@ -34,16 +34,38 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       global: { headers: { 'x-tenant-id': tenantId } },
     });
 
-    // 1. Resolve professional profile
-    const { data: profiles, error: profileErr } = await supabase
-      .from('profiles')
-      .select('id, full_name')
-      .limit(1);
+    // 1. Resolve professional profile using Authorization header if present
+    const authHeader = req.headers.authorization;
+    let profile: any = null;
 
-    if (profileErr || !profiles || profiles.length === 0) {
-      return res.status(404).json({ error: 'No se encontró un perfil profesional para esta organización.' });
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      const token = authHeader.substring(7);
+      const { data: { user }, error: userErr } = await supabase.auth.getUser(token);
+      if (!userErr && user) {
+        const { data: profiles } = await supabase
+          .from('profiles')
+          .select('id, full_name')
+          .eq('user_id', user.id)
+          .eq('organization_id', tenantId)
+          .limit(1);
+        if (profiles && profiles.length > 0) {
+          profile = profiles[0];
+        }
+      }
     }
-    const profile = profiles[0];
+
+    if (!profile) {
+      // Fallback for compatibility/demo
+      const { data: profiles, error: profileErr } = await supabase
+        .from('profiles')
+        .select('id, full_name')
+        .limit(1);
+
+      if (profileErr || !profiles || profiles.length === 0) {
+        return res.status(404).json({ error: 'No se encontró un perfil profesional para esta organización.' });
+      }
+      profile = profiles[0];
+    }
 
     // 2. Validate credit balance for INFORME_CLINICO
     const { data: ledgerData, error: ledgerErr } = await supabase

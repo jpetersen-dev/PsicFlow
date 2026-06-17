@@ -12,7 +12,10 @@ import {
   AlertCircle,
   Clock,
   Sparkles,
-  Camera
+  Camera,
+  FolderOpen,
+  Plus,
+  X
 } from 'lucide-react';
 import { supabase } from '../../lib/supabaseClient';
 import { usePrivacyMode } from '../../components/PrivacyModeProvider';
@@ -28,6 +31,14 @@ export default function SesionFicha() {
   const [loading, setLoading] = useState(true);
   const [isProcessingAI, setIsProcessingAI] = useState(false);
   const [activeTab, setActiveTab] = useState<'soap' | 'admin' | 'archivos'>('soap');
+
+  // Session files state
+  const [sessionFiles, setSessionFiles] = useState<any[]>([]);
+  const [isAddFileModalOpen, setIsAddFileModalOpen] = useState(false);
+  const [fileDescription, setFileDescription] = useState('');
+  const [fileCategory, setFileCategory] = useState('General');
+  const [uploadingFileObject, setUploadingFileObject] = useState<File | null>(null);
+  const [submitting, setSubmitting] = useState(false);
 
   const fetchSessionData = async () => {
     if (!id) return;
@@ -86,6 +97,12 @@ export default function SesionFicha() {
       if (audioData && audioData[0]) {
         setAudioAsset(audioData[0]);
       }
+      // 4. Fetch Session Files
+      const { data: filesData } = await supabase
+        .from('files_vault')
+        .select('*')
+        .eq('session_id', id);
+      if (filesData) setSessionFiles(filesData);
     } catch (err) {
       console.error('Error fetching session data:', err);
     } finally {
@@ -103,10 +120,17 @@ export default function SesionFicha() {
       const tenantId = localStorage.getItem('active-tenant-id') || '';
       const transcriptText = clinicalNote?.human_validated_content || 'El paciente refiere sintomatología ansiosa asociada a carga laboral.';
 
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token || '';
+
       // Call backend API for SOAP generation with credit billing
       const res = await fetch('/api/ai/soap', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-tenant-id': tenantId },
+        headers: { 
+          'Content-Type': 'application/json', 
+          'x-tenant-id': tenantId,
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+        },
         body: JSON.stringify({ session_id: id, transcript_text: transcriptText }),
       });
 
@@ -161,10 +185,17 @@ export default function SesionFicha() {
       const tenantId = localStorage.getItem('active-tenant-id') || '';
       const ocrText = 'Apuntes manuscritos: Paciente refiere ansiedad por sobrecarga en oficina. Presenta taquicardia situacional. Estrategia: Respiración diafragmática.';
 
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token || '';
+
       // Call same SOAP endpoint with OCR-transcribed text
       const res = await fetch('/api/ai/soap', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-tenant-id': tenantId },
+        headers: { 
+          'Content-Type': 'application/json', 
+          'x-tenant-id': tenantId,
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+        },
         body: JSON.stringify({ session_id: id, transcript_text: ocrText }),
       });
 
@@ -251,6 +282,8 @@ export default function SesionFicha() {
       const { error } = await supabase
         .from('sessions')
         .update({
+          date_session: session.date_session,
+          time_session: session.time_session,
           modality: session.modality,
           status_session: session.status_session,
           value_session: Number(session.value_session),
@@ -270,18 +303,186 @@ export default function SesionFicha() {
     }
   };
 
-  const handleDownloadPDF = () => {
-    // Basic single-page text PDF download simulation
-    const headers = `FOLIO SESIÓN: ${session.id}\nPACIENTE: ${session.patient?.full_name}\nFECHA: ${session.date_session}\n-----------------------------\n`;
-    const body = `TEMAS ABORDADOS:\n${clinicalNote.temas_abordados || 'No registrado'}\n\nSÍNTOMAS OBSERVADOS:\n${clinicalNote.sintomas_observados || 'No registrado'}\n\nCONTENIDO VALIDADO:\n${clinicalNote.human_validated_content || 'No registrado'}\n\nFIRMADO Y VALIDADO POR EL TERAPEUTA: ${clinicalNote.is_human_validated ? 'SÍ' : 'NO'}`;
-    
-    const fileContent = "data:text/plain;charset=utf-8," + encodeURIComponent(headers + body);
-    const link = document.createElement("a");
-    link.setAttribute("href", fileContent);
-    link.setAttribute("download", `nota_clinica_${id}.txt`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+  const handleDownloadPDF = async () => {
+    try {
+      const tenantId = localStorage.getItem('active-tenant-id');
+      const { data: { session: authSess } } = await supabase.auth.getSession();
+      if (!authSess?.user?.id || !tenantId) return;
+
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('user_id', authSess.user.id)
+        .eq('organization_id', tenantId)
+        .limit(1)
+        .single();
+
+      const logoImg = profile?.logo_url ? `<img src="${profile.logo_url}" style="max-height: 70px; float: right; margin-bottom: 15px;" />` : '';
+      const sigImg = profile?.signature_url ? `
+        <div style="margin-top: 50px; text-align: right; page-break-inside: avoid;">
+          <img src="${profile.signature_url}" style="max-height: 80px; display: inline-block;" />
+          <p style="margin: 5px 0 0 0; font-size: 11px; font-weight: bold; border-top: 1px solid #ccc; display: inline-block; padding-top: 4px; text-align: center;">
+            Firma del Terapeuta<br/>${profile.full_name || ''}
+          </p>
+        </div>` : '';
+
+      const printContent = `
+        <html>
+        <head>
+          <title>Nota de Evolución - ${session.patient?.full_name}</title>
+          <style>
+            body { font-family: Arial, sans-serif; color: #333; line-height: 1.6; padding: 40px; }
+            .header { border-bottom: 2px solid #3b82f6; padding-bottom: 15px; margin-bottom: 25px; }
+            .header::after { content: ""; clear: both; display: table; }
+            .title { font-size: 22px; font-weight: bold; color: #1e3a8a; margin: 0; }
+            .subtitle { font-size: 12px; color: #666; margin: 2px 0 0 0; }
+            .meta-section { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 25px; background: #f9fafb; padding: 15px; border-radius: 8px; border: 1px solid #e5e7eb; }
+            .meta-item { font-size: 12px; }
+            .meta-label { font-weight: bold; color: #4b5563; }
+            .meta-val { color: #1f2937; }
+            .section { margin-bottom: 20px; }
+            .section-title { font-size: 13px; font-weight: bold; text-transform: uppercase; color: #2563eb; border-bottom: 1px solid #e5e7eb; padding-bottom: 4px; margin-bottom: 8px; }
+            .section-content { font-size: 12px; text-align: justify; white-space: pre-wrap; }
+            @media print {
+              body { padding: 20px; }
+              button { display: none; }
+            }
+          </style>
+        </head>
+        <body>
+          <div class="header">
+            ${logoImg}
+            <div style="float: left;">
+              <h1 class="title">REGISTRO CLÍNICO DE EVOLUCIÓN</h1>
+              <p class="subtitle">Ecosistema Clínico PsicoAlivio</p>
+            </div>
+          </div>
+          
+          <div class="meta-section">
+            <div class="meta-item"><span class="meta-label">Paciente:</span> <span class="meta-val">${session.patient?.full_name}</span></div>
+            <div class="meta-item"><span class="meta-label">Fecha de Sesión:</span> <span class="meta-val">${session.date_session} (${session.time_session.slice(0,5)} hrs)</span></div>
+            <div class="meta-item"><span class="meta-label">Modalidad:</span> <span class="meta-val">${session.modality}</span></div>
+            <div class="meta-item"><span class="meta-label">Folio Sesión:</span> <span class="meta-val">${session.id}</span></div>
+          </div>
+
+          <div class="section">
+            <div class="section-title">Temas Abordados</div>
+            <div class="section-content">${clinicalNote?.temas_abordados || 'No registrado'}</div>
+          </div>
+
+          <div class="section">
+            <div class="section-title">Síntomas Observados</div>
+            <div class="section-content">${clinicalNote?.sintomas_observados || 'No registrado'}</div>
+          </div>
+
+          <div class="section">
+            <div class="section-title">Contenido Validado y Evolución</div>
+            <div class="section-content">${clinicalNote?.human_validated_content || 'No registrado'}</div>
+          </div>
+
+          ${sigImg}
+
+          <script>
+            window.onload = function() { window.print(); }
+          </script>
+        </body>
+        </html>
+      `;
+
+      const printWindow = window.open('', '_blank');
+      if (printWindow) {
+        printWindow.document.write(printContent);
+        printWindow.document.close();
+      } else {
+        alert('Por favor habilite ventanas emergentes para la descarga del PDF.');
+      }
+    } catch (err: any) {
+      alert('Error al exportar nota: ' + err.message);
+    }
+  };
+
+  const handleDownloadWord = async () => {
+    try {
+      const tenantId = localStorage.getItem('active-tenant-id');
+      const { data: { session: authSess } } = await supabase.auth.getSession();
+      if (!authSess?.user?.id || !tenantId) return;
+
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('user_id', authSess.user.id)
+        .eq('organization_id', tenantId)
+        .limit(1)
+        .single();
+
+      const logoHtml = profile?.logo_url ? `<img src="${profile.logo_url}" width="150" height="auto" style="display:block; margin-bottom: 20px;" />` : '';
+      const sigHtml = profile?.signature_url ? `
+        <div style="margin-top: 50px; text-align: right;">
+          <img src="${profile.signature_url}" width="150" height="auto" />
+          <p style="margin:5px 0 0 0; font-size:12px; font-weight:bold; border-top:1px solid #999; display:inline-block; padding-top:4px; text-align:center;">
+            Firma: ${profile.full_name || ''}
+          </p>
+        </div>` : '';
+
+      const htmlContent = `
+        <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40">
+        <head>
+          <meta charset="utf-8">
+          <title>Registro de Sesión</title>
+          <style>
+            body { font-family: Arial, sans-serif; line-height: 1.6; color: #333333; }
+            .header { border-bottom: 2px solid #2563eb; padding-bottom: 15px; margin-bottom: 20px; }
+            .title { font-size: 18pt; font-weight: bold; color: #1e3a8a; }
+            .meta-table { width: 100%; border-collapse: collapse; margin-bottom: 25px; background-color: #f9fafb; }
+            .meta-table td { padding: 8px; border: 1px solid #e5e7eb; font-size: 10pt; }
+            .section-title { font-size: 11pt; font-weight: bold; color: #2563eb; border-bottom: 1px solid #cccccc; padding-bottom: 3px; margin-top: 15px; margin-bottom: 8px; text-transform: uppercase; }
+            .section-content { font-size: 10pt; text-align: justify; }
+          </style>
+        </head>
+        <body>
+          <div class="header">
+            ${logoHtml}
+            <div class="title">REGISTRO CLÍNICO DE EVOLUCIÓN</div>
+            <p style="font-size: 9pt; color: #666;">PsicoAlivio Ecosistema Clínico</p>
+          </div>
+          
+          <table class="meta-table">
+            <tr>
+              <td><strong>Paciente:</strong> ${session.patient?.full_name}</td>
+              <td><strong>Fecha de Sesión:</strong> ${session.date_session} (${session.time_session.slice(0,5)} hrs)</td>
+            </tr>
+            <tr>
+              <td><strong>Modalidad:</strong> ${session.modality}</td>
+              <td><strong>Folio Sesión:</strong> ${session.id}</td>
+            </tr>
+          </table>
+
+          <div class="section-title">Temas Abordados</div>
+          <div class="section-content">${(clinicalNote?.temas_abordados || 'No registrado').replace(/\n/g, '<br/>')}</div>
+
+          <div class="section-title">Síntomas Observados</div>
+          <div class="section-content">${(clinicalNote?.sintomas_observados || 'No registrado').replace(/\n/g, '<br/>')}</div>
+
+          <div class="section-title">Contenido Validado y Evolución</div>
+          <div class="section-content">${(clinicalNote?.human_validated_content || 'No registrado').replace(/\n/g, '<br/>')}</div>
+
+          ${sigHtml}
+        </body>
+        </html>
+      `;
+
+      const blob = new Blob(['\ufeff' + htmlContent], { type: 'application/msword' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `nota_clinica_${session.patient?.full_name.replace(/\s+/g, '_')}_${session.date_session}.doc`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    } catch (err: any) {
+      alert('Error al exportar Word: ' + err.message);
+    }
   };
 
   if (loading) return <div className="py-20 text-center text-text-muted text-sm">Cargando evolución de sesión...</div>;
@@ -307,14 +508,23 @@ export default function SesionFicha() {
           <div className="flex items-center gap-2">
             <button 
               onClick={handleDownloadPDF}
-              className="bg-bg-input border border-border-color hover:bg-bg-card-hover px-4 py-2.5 rounded-lg text-xs font-semibold text-text-primary flex items-center gap-1.5 transition-all"
+              className="bg-bg-input border border-border-color hover:bg-bg-card-hover px-3 py-2 rounded-lg text-xs font-semibold text-text-primary flex items-center gap-1 transition-all cursor-pointer"
+              title="Exportar como PDF"
             >
-              <Download className="w-4 h-4" />
-              <span>Exportar Nota</span>
+              <Download className="w-4 h-4 text-danger" />
+              <span>PDF</span>
+            </button>
+            <button 
+              onClick={handleDownloadWord}
+              className="bg-bg-input border border-border-color hover:bg-bg-card-hover px-3 py-2 rounded-lg text-xs font-semibold text-text-primary flex items-center gap-1 transition-all cursor-pointer"
+              title="Exportar como Word editable"
+            >
+              <Download className="w-4 h-4 text-blue-500" />
+              <span>Word</span>
             </button>
             <button 
               onClick={() => router.push(`/pacientes/${session.patient_id}`)}
-              className="bg-bg-input border border-border-color hover:bg-bg-card-hover px-4 py-2.5 rounded-lg text-xs font-semibold text-text-primary transition-all"
+              className="bg-bg-input border border-border-color hover:bg-bg-card-hover px-4 py-2.5 rounded-lg text-xs font-semibold text-text-primary transition-all cursor-pointer"
             >
               Ficha Paciente
             </button>
@@ -340,6 +550,15 @@ export default function SesionFicha() {
           >
             <DollarSign className="w-4 h-4" />
             <span>Administración y Cobros</span>
+          </button>
+          <button 
+            onClick={() => setActiveTab('archivos')}
+            className={`py-3 px-1 border-b-2 text-sm font-semibold transition-all flex items-center gap-2 ${
+              activeTab === 'archivos' ? 'border-border-focus text-accent-primary' : 'border-transparent text-text-secondary hover:text-text-primary'
+            }`}
+          >
+            <FolderOpen className="w-4 h-4" />
+            <span>Archivos de la Sesión</span>
           </button>
         </div>
 
@@ -499,11 +718,31 @@ export default function SesionFicha() {
             <form onSubmit={handleUpdateAdminDetails} className="max-w-xl space-y-4">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
+                  <label className="block text-xs text-text-secondary mb-1 font-semibold">Fecha de Sesión</label>
+                  <input 
+                    type="date"
+                    required
+                    value={session.date_session || ''}
+                    onChange={(e) => setSession({ ...session, date_session: e.target.value })}
+                    className="w-full bg-bg-input border border-border-color rounded-lg px-3 py-2 text-sm text-text-primary focus:outline-none font-mono"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-text-secondary mb-1 font-semibold">Hora de Sesión</label>
+                  <input 
+                    type="time"
+                    required
+                    value={session.time_session ? session.time_session.slice(0, 5) : ''}
+                    onChange={(e) => setSession({ ...session, time_session: e.target.value })}
+                    className="w-full bg-bg-input border border-border-color rounded-lg px-3 py-2 text-sm text-text-primary focus:outline-none font-mono"
+                  />
+                </div>
+                <div>
                   <label className="block text-xs text-text-secondary mb-1 font-semibold">Modalidad de Atención</label>
                   <select 
                     value={session.modality}
                     onChange={(e) => setSession({ ...session, modality: e.target.value })}
-                    className="w-full bg-bg-input border border-border-color rounded-lg px-3 py-2 text-sm text-text-primary focus:outline-none"
+                    className="w-full bg-bg-input border border-border-color rounded-lg px-3 py-2 text-sm text-text-primary focus:outline-none cursor-pointer"
                   >
                     <option value="Online" className="bg-bg-sidebar text-text-primary">Online</option>
                     <option value="Presencial" className="bg-bg-sidebar text-text-primary">Presencial</option>
@@ -514,7 +753,7 @@ export default function SesionFicha() {
                   <select 
                     value={session.status_session}
                     onChange={(e) => setSession({ ...session, status_session: e.target.value })}
-                    className="w-full bg-bg-input border border-border-color rounded-lg px-3 py-2 text-sm text-text-primary focus:outline-none"
+                    className="w-full bg-bg-input border border-border-color rounded-lg px-3 py-2 text-sm text-text-primary focus:outline-none cursor-pointer"
                   >
                     <option value="Programada" className="bg-bg-sidebar text-text-primary">Programada</option>
                     <option value="Completa" className="bg-bg-sidebar text-text-primary">Completa</option>
@@ -536,7 +775,7 @@ export default function SesionFicha() {
                   <select 
                     value={session.status_payment}
                     onChange={(e) => setSession({ ...session, status_payment: e.target.value })}
-                    className="w-full bg-bg-input border border-border-color rounded-lg px-3 py-2 text-sm text-text-primary focus:outline-none"
+                    className="w-full bg-bg-input border border-border-color rounded-lg px-3 py-2 text-sm text-text-primary focus:outline-none cursor-pointer"
                   >
                     <option value="Pendiente" className="bg-bg-sidebar text-text-primary">Pendiente</option>
                     <option value="Pagado" className="bg-bg-sidebar text-text-primary">Pagado</option>
@@ -548,7 +787,7 @@ export default function SesionFicha() {
                   <select 
                     value={session.payment_type || ''}
                     onChange={(e) => setSession({ ...session, payment_type: e.target.value })}
-                    className="w-full bg-bg-input border border-border-color rounded-lg px-3 py-2 text-sm text-text-primary focus:outline-none"
+                    className="w-full bg-bg-input border border-border-color rounded-lg px-3 py-2 text-sm text-text-primary focus:outline-none cursor-pointer"
                   >
                     <option value="" className="bg-bg-sidebar text-text-primary">Seleccione...</option>
                     <option value="Transferencia electrónica" className="bg-bg-sidebar text-text-primary">Transferencia electrónica</option>
@@ -571,7 +810,7 @@ export default function SesionFicha() {
                   <select 
                     value={session.boleta_status}
                     onChange={(e) => setSession({ ...session, boleta_status: e.target.value })}
-                    className="w-full bg-bg-input border border-border-color rounded-lg px-3 py-2 text-sm text-text-primary focus:outline-none"
+                    className="w-full bg-bg-input border border-border-color rounded-lg px-3 py-2 text-sm text-text-primary focus:outline-none cursor-pointer"
                   >
                     <option value="Pendiente" className="bg-bg-sidebar text-text-primary">Pendiente</option>
                     <option value="Emitida" className="bg-bg-sidebar text-text-primary">Emitida</option>
@@ -592,14 +831,208 @@ export default function SesionFicha() {
 
               <button 
                 type="submit"
-                className="bg-accent-primary hover:bg-accent-hover text-bg-primary font-bold px-4 py-2.5 rounded-lg text-xs transition-all"
+                className="bg-accent-primary hover:bg-accent-hover text-bg-primary font-bold px-4 py-2.5 rounded-lg text-xs transition-all cursor-pointer"
               >
                 Guardar Cambios Administrativos
               </button>
             </form>
           )}
+
+          {activeTab === 'archivos' && (
+            <div className="space-y-6">
+              <div className="flex items-center justify-between border-b border-border-color pb-3">
+                <h3 className="text-sm font-semibold text-text-primary">Archivos Clínicos de la Sesión</h3>
+                <div>
+                  <button
+                    onClick={() => {
+                      const input = document.getElementById('session-file-input');
+                      if (input) input.click();
+                    }}
+                    className="bg-bg-input border border-border-color hover:bg-bg-card-hover text-accent-primary font-semibold px-3 py-1.5 rounded-lg text-xs flex items-center gap-1.5 transition-all cursor-pointer"
+                  >
+                    <Plus className="w-4 h-4" />
+                    <span>Subir Archivo</span>
+                  </button>
+                  <input
+                    id="session-file-input"
+                    type="file"
+                    className="hidden"
+                    accept=".pdf,.doc,.docx,.png,.jpg,.jpeg,.txt"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (!file) return;
+                      setUploadingFileObject(file);
+                      setFileDescription('');
+                      setFileCategory('General');
+                      setIsAddFileModalOpen(true);
+                      e.target.value = '';
+                    }}
+                  />
+                </div>
+              </div>
+
+              {sessionFiles.length === 0 ? (
+                <div className="py-12 text-center text-text-muted text-xs bg-bg-input/10 border border-border-color rounded-xl">
+                  No hay archivos específicos cargados para esta sesión.
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {sessionFiles.map((file) => (
+                    <div key={file.id} className="bg-bg-input/40 border border-border-color p-4 rounded-xl flex items-start justify-between gap-3 text-xs">
+                      <div className="space-y-1 flex-1 min-w-0">
+                        <p className="font-semibold text-text-primary truncate">{file.original_name}</p>
+                        <p className="text-[10px] text-text-muted font-semibold">Categoría: {file.category} • Tipo: {file.mime_type}</p>
+                        {file.description && <p className="text-text-secondary pt-1 font-medium">{file.description}</p>}
+                      </div>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <button
+                          onClick={async () => {
+                            const { data } = await supabase.storage
+                              .from('clinical-vault')
+                              .createSignedUrl(file.storage_path, 60);
+                            if (data?.signedUrl) {
+                              window.open(data.signedUrl, '_blank');
+                            } else {
+                              alert('No se pudo generar el enlace de descarga.');
+                            }
+                          }}
+                          className="text-text-muted hover:text-accent-primary p-1 cursor-pointer"
+                          title="Descargar"
+                        >
+                          <FolderOpen className="w-4 h-4" />
+                        </button>
+                        <button 
+                          onClick={async () => {
+                            if (!confirm('¿Seguro que deseas eliminar este archivo?')) return;
+                            if (file.storage_path) {
+                              await supabase.storage.from('clinical-vault').remove([file.storage_path]);
+                            }
+                            const { error: delErr } = await supabase.from('files_vault').delete().eq('id', file.id);
+                            if (delErr) alert(delErr.message);
+                            else fetchSessionData();
+                          }}
+                          className="text-text-muted hover:text-danger p-1 cursor-pointer"
+                          title="Eliminar"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
+
+      {/* File Upload Modal */}
+      {isAddFileModalOpen && uploadingFileObject && (
+        <div className="fixed inset-0 bg-bg-primary/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-bg-card border border-border-color w-full max-w-lg rounded-xl shadow-2xl flex flex-col">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-border-color">
+              <h3 className="font-bold text-text-primary">Subir Documento a la Sesión</h3>
+              <button onClick={() => {
+                setIsAddFileModalOpen(false);
+                setUploadingFileObject(null);
+              }} className="text-text-secondary hover:text-text-primary">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-6 space-y-4">
+              <div>
+                <p className="text-xs text-text-muted">Archivo seleccionado: <span className="font-semibold text-text-primary">{uploadingFileObject.name}</span> ({(uploadingFileObject.size / 1024).toFixed(1)} KB)</p>
+              </div>
+              <div>
+                <label className="block text-xs text-text-secondary mb-1 font-semibold">Categoría</label>
+                <select 
+                  value={fileCategory}
+                  onChange={(e) => setFileCategory(e.target.value)}
+                  className="w-full bg-bg-input border border-border-color rounded-lg px-3 py-2 text-sm text-text-primary focus:outline-none cursor-pointer"
+                >
+                  <option value="General">General</option>
+                  <option value="Evaluación">Evaluación</option>
+                  <option value="Informe">Informe</option>
+                  <option value="Receta">Receta</option>
+                  <option value="Otro">Otro</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs text-text-secondary mb-1 font-semibold">Descripción (Obligatorio) *</label>
+                <textarea 
+                  rows={3} required
+                  placeholder="Describa el contenido o propósito del archivo..."
+                  value={fileDescription}
+                  onChange={(e) => setFileDescription(e.target.value)}
+                  className="w-full bg-bg-input border border-border-color rounded-lg px-3 py-2 text-sm text-text-primary focus:outline-none"
+                />
+              </div>
+            </div>
+            <div className="flex justify-end gap-3 px-6 py-4 border-t border-border-color bg-bg-input/40">
+              <button 
+                type="button"
+                onClick={() => {
+                  setIsAddFileModalOpen(false);
+                  setUploadingFileObject(null);
+                }}
+                className="px-4 py-2 border border-border-color hover:bg-bg-card-hover text-xs font-bold rounded-lg text-text-secondary transition-all cursor-pointer"
+              >
+                Cancelar
+              </button>
+              <button 
+                type="button"
+                disabled={!fileDescription.trim() || submitting}
+                onClick={async () => {
+                  if (!fileDescription.trim()) return;
+                  setSubmitting(true);
+                  try {
+                    const tenantId = localStorage.getItem('active-tenant-id') || '';
+                    const savedName = `vault_${Date.now()}_${uploadingFileObject.name.replace(/\s/g, '_')}`;
+                    const storagePath = `${tenantId}/sessions/${id}/${savedName}`;
+
+                    // Upload to Supabase Storage
+                    const { error: uploadErr } = await supabase.storage
+                      .from('clinical-vault')
+                      .upload(storagePath, uploadingFileObject);
+
+                    if (uploadErr) throw uploadErr;
+
+                    // Register in files_vault table
+                    const { error: dbErr } = await supabase
+                      .from('files_vault')
+                      .insert({
+                        organization_id: tenantId,
+                        patient_id: session.patient_id,
+                        session_id: id,
+                        original_name: uploadingFileObject.name,
+                        saved_name: savedName,
+                        storage_path: storagePath,
+                        mime_type: uploadingFileObject.type || 'application/octet-stream',
+                        category: fileCategory,
+                        description: fileDescription.trim(),
+                        size_bytes: uploadingFileObject.size
+                      });
+
+                    if (dbErr) throw dbErr;
+
+                    alert('Archivo subido con éxito.');
+                    setIsAddFileModalOpen(false);
+                    setUploadingFileObject(null);
+                    fetchSessionData();
+                  } catch (err: any) {
+                    alert('Error al subir archivo: ' + err.message);
+                  } finally {
+                    setSubmitting(false);
+                  }
+                }}
+                className="bg-accent-primary hover:bg-accent-hover text-bg-primary disabled:opacity-50 disabled:cursor-not-allowed font-bold px-4 py-2 rounded-lg text-xs transition-all cursor-pointer"
+              >
+                Subir
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }
