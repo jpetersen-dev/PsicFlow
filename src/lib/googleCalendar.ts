@@ -4,6 +4,7 @@ import crypto from 'crypto';
 const SCOPES = [
   'https://www.googleapis.com/auth/calendar.readonly',
   'https://www.googleapis.com/auth/calendar.freebusy',
+  'https://www.googleapis.com/auth/userinfo.email',
 ];
 
 /**
@@ -51,9 +52,22 @@ export function getCalendarClient(refreshToken: string) {
 }
 
 /**
- * Gets the authenticated user's email from the OAuth2 token info.
+ * Gets the authenticated user's email.
+ * First tries decoding the id_token (no extra API call).
+ * Falls back to oauth2.userinfo.get() if id_token is unavailable.
  */
-export async function getGoogleEmail(accessToken: string): Promise<string> {
+export async function getGoogleEmail(accessToken: string, idToken?: string): Promise<string> {
+  // Try to extract email from id_token (JWT payload, no verification needed here)
+  if (idToken) {
+    try {
+      const payload = JSON.parse(Buffer.from(idToken.split('.')[1], 'base64').toString());
+      if (payload.email) return payload.email;
+    } catch {
+      // Fall through to API call
+    }
+  }
+
+  // Fallback: use access_token to query userinfo
   const client = createOAuth2Client();
   client.setCredentials({ access_token: accessToken });
   const oauth2 = google.oauth2({ version: 'v2', auth: client });

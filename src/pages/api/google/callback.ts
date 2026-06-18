@@ -45,7 +45,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     // 3. Get the Google user's email
-    const googleEmail = await getGoogleEmail(tokens.access_token);
+    const googleEmail = await getGoogleEmail(tokens.access_token, tokens.id_token as string | undefined);
 
     // 4. Create a service-level Supabase client to store tokens
     // (The user might not have a session cookie on this redirect)
