@@ -23,7 +23,10 @@ import {
   X,
   Trash2,
   CalendarDays,
-  Briefcase
+  Briefcase,
+  CalendarClock,
+  ExternalLink,
+  RefreshCw
 } from 'lucide-react';
 import { supabase } from '../lib/supabaseClient';
 import { usePrivacyMode } from '../components/PrivacyModeProvider';
@@ -62,6 +65,12 @@ export default function Calendario() {
   // Form State for Task
   const [newReminderText, setNewReminderText] = useState('');
   
+  // FreeBusy / Availability states
+  const [availabilityTimeline, setAvailabilityTimeline] = useState<any[]>([]);
+  const [availabilityLoading, setAvailabilityLoading] = useState(false);
+  const [googleConnected, setGoogleConnected] = useState(false);
+  const [availabilityCache, setAvailabilityCache] = useState<Record<string, any>>({}); 
+
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleFileAttach = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -191,6 +200,53 @@ export default function Calendario() {
   useEffect(() => {
     loadAllCalendarData();
   }, []);
+
+  // FreeBusy: Fetch availability when selectedDate changes
+  const fetchAvailability = async (date: Date) => {
+    const dateStr = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+    
+    // Check cache first
+    if (availabilityCache[dateStr]) {
+      const cached = availabilityCache[dateStr];
+      setAvailabilityTimeline(cached.timeline);
+      setGoogleConnected(cached.googleConnected);
+      return;
+    }
+
+    setAvailabilityLoading(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const tenantId = localStorage.getItem('active-tenant-id');
+      
+      const res = await fetch('/api/google/freebusy', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${session?.access_token}`,
+          'x-tenant-id': tenantId || '',
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ date: dateStr, dayStartHour: 8, dayEndHour: 20 }),
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        setAvailabilityTimeline(data.timeline || []);
+        setGoogleConnected(data.googleConnected || false);
+        // Cache the result
+        setAvailabilityCache(prev => ({ ...prev, [dateStr]: { timeline: data.timeline, googleConnected: data.googleConnected } }));
+      }
+    } catch (err) {
+      console.error('Error fetching availability:', err);
+    } finally {
+      setAvailabilityLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (selectedDate) {
+      fetchAvailability(selectedDate);
+    }
+  }, [selectedDate]);
 
   const handleAddReminder = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -874,6 +930,107 @@ export default function Calendario() {
         {/* Right Side: Reminders & Notes Panel */}
         <aside className="w-full lg:w-[320px] bg-surface-container-low border-l border-outline-variant/20 p-6 flex flex-col gap-6 overflow-y-auto shrink-0">
           
+          {/* Availability Section */}
+          <section className="space-y-3">
+            <div className="flex items-center justify-between border-b border-outline-variant/20 pb-2">
+              <h4 className="font-headline-sm text-headline-sm text-on-surface font-bold flex items-center gap-2">
+                <CalendarClock className="w-4 h-4 text-primary" />
+                Disponibilidad
+              </h4>
+              <span className="text-[11px] text-on-surface-variant font-medium">
+                {selectedDate.toLocaleDateString('es-CL', { weekday: 'short', day: 'numeric', month: 'short' })}
+              </span>
+            </div>
+
+            {availabilityLoading ? (
+              <div className="flex items-center justify-center py-6 gap-2 text-on-surface-variant">
+                <RefreshCw className="w-4 h-4 animate-spin" />
+                <span className="text-xs">Cargando disponibilidad...</span>
+              </div>
+            ) : availabilityTimeline.length > 0 ? (
+              <div className="space-y-1 max-h-64 overflow-y-auto pr-1">
+                {availabilityTimeline.map((block: any, idx: number) => {
+                  const isAvailable = block.type === 'available';
+                  const isGoogle = block.source === 'google';
+                  const isPsicFlow = block.source === 'psicflow';
+                  
+                  return (
+                    <div 
+                      key={idx}
+                      className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs transition-colors ${
+                        isAvailable 
+                          ? 'bg-green-50 border border-green-200/60' 
+                          : isGoogle
+                            ? 'bg-orange-50 border border-orange-200/60'
+                            : 'bg-blue-50 border border-blue-200/60'
+                      }`}
+                    >
+                      {/* Time */}
+                      <span className={`font-mono font-semibold shrink-0 ${
+                        isAvailable ? 'text-green-700' : isGoogle ? 'text-orange-700' : 'text-blue-700'
+                      }`}>
+                        {block.start}
+                      </span>
+                      <span className="text-on-surface-variant">—</span>
+                      <span className={`font-mono font-semibold shrink-0 ${
+                        isAvailable ? 'text-green-700' : isGoogle ? 'text-orange-700' : 'text-blue-700'
+                      }`}>
+                        {block.end}
+                      </span>
+                      
+                      {/* Label */}
+                      <span className={`truncate ${
+                        isAvailable ? 'text-green-600' : isGoogle ? 'text-orange-600' : 'text-blue-600'
+                      }`}>
+                        {isAvailable ? '✓ Disponible' : block.label}
+                      </span>
+
+                      {/* Source badge */}
+                      {isGoogle && (
+                        <span className="ml-auto px-1.5 py-0.5 bg-orange-100 text-orange-600 rounded text-[9px] font-bold shrink-0">
+                          G
+                        </span>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="text-center py-4">
+                <p className="text-xs text-on-surface-variant">Sin datos de disponibilidad para este día.</p>
+              </div>
+            )}
+
+            {/* Google Calendar connection hint */}
+            {!googleConnected && (
+              <a 
+                href="/perfil" 
+                className="flex items-center gap-2 px-3 py-2 bg-primary-container/15 border border-primary/10 rounded-lg text-[11px] text-primary hover:bg-primary-container/25 transition-colors group"
+              >
+                <ExternalLink className="w-3.5 h-3.5 shrink-0" />
+                <span>Conecta Google Calendar para ver toda tu disponibilidad</span>
+              </a>
+            )}
+
+            {/* Legend */}
+            <div className="flex flex-wrap gap-x-4 gap-y-1 pt-1 text-[10px] text-on-surface-variant">
+              <div className="flex items-center gap-1">
+                <span className="w-2 h-2 rounded-full bg-green-400"></span>
+                Disponible
+              </div>
+              <div className="flex items-center gap-1">
+                <span className="w-2 h-2 rounded-full bg-blue-400"></span>
+                PsicFlow
+              </div>
+              {googleConnected && (
+                <div className="flex items-center gap-1">
+                  <span className="w-2 h-2 rounded-full bg-orange-400"></span>
+                  Google
+                </div>
+              )}
+            </div>
+          </section>
+
           {/* Daily Reminders */}
           <section className="space-y-4">
             <div className="flex items-center justify-between border-b border-outline-variant/20 pb-2">

@@ -1,5 +1,6 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import Head from 'next/head';
+import { useRouter } from 'next/router';
 import { 
   User, 
   ShieldCheck, 
@@ -11,11 +12,17 @@ import {
   Bell, 
   ChevronRight, 
   ShieldAlert,
-  Camera
+  Camera,
+  CalendarSync,
+  Unplug,
+  RefreshCw,
+  ExternalLink,
+  Check
 } from 'lucide-react';
 import { supabase } from '../lib/supabaseClient';
 
 export default function Perfil() {
+  const router = useRouter();
   const [profile, setProfile] = useState<any>(null);
   const [organization, setOrganization] = useState<any>(null);
   const [userClinics, setUserClinics] = useState<any[]>([]);
@@ -38,6 +45,13 @@ export default function Perfil() {
   const [notifyReminders, setNotifyReminders] = useState(true);
   const [tfaEnabled, setTfaEnabled] = useState(true);
 
+  // Google Calendar integration states
+  const [googleConnected, setGoogleConnected] = useState(false);
+  const [googleEmail, setGoogleEmail] = useState('');
+  const [googleCalendars, setGoogleCalendars] = useState<any[]>([]);
+  const [googleLoading, setGoogleLoading] = useState(false);
+  const [googleMessage, setGoogleMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Load toggles from localStorage
@@ -49,6 +63,105 @@ export default function Perfil() {
     const tfa = localStorage.getItem('tfa-enabled');
     if (tfa !== null) setTfaEnabled(tfa === 'true');
   }, []);
+
+  // Check for Google callback query params
+  useEffect(() => {
+    if (router.query.google === 'connected') {
+      setGoogleMessage({ type: 'success', text: '¡Google Calendar conectado exitosamente!' });
+      fetchGoogleCalendars();
+      // Clean the URL
+      router.replace('/perfil', undefined, { shallow: true });
+    } else if (router.query.google === 'denied') {
+      setGoogleMessage({ type: 'error', text: 'Acceso a Google Calendar denegado por el usuario.' });
+      router.replace('/perfil', undefined, { shallow: true });
+    } else if (router.query.google === 'error') {
+      setGoogleMessage({ type: 'error', text: 'Error al conectar Google Calendar. Intenta nuevamente.' });
+      router.replace('/perfil', undefined, { shallow: true });
+    }
+  }, [router.query.google]);
+
+  // Google Calendar functions
+  const getAuthHeaders = async () => {
+    const { data: { session } } = await supabase.auth.getSession();
+    const tenantId = localStorage.getItem('active-tenant-id');
+    return {
+      'Authorization': `Bearer ${session?.access_token}`,
+      'x-tenant-id': tenantId || '',
+      'Content-Type': 'application/json',
+    };
+  };
+
+  const fetchGoogleCalendars = useCallback(async () => {
+    setGoogleLoading(true);
+    try {
+      const headers = await getAuthHeaders();
+      const res = await fetch('/api/google/calendars', { headers });
+      const data = await res.json();
+      setGoogleConnected(data.connected || false);
+      setGoogleEmail(data.googleEmail || '');
+      setGoogleCalendars(data.calendars || []);
+    } catch (err) {
+      console.error('Error fetching Google calendars:', err);
+    } finally {
+      setGoogleLoading(false);
+    }
+  }, []);
+
+  const handleGoogleConnect = async () => {
+    setGoogleLoading(true);
+    try {
+      const headers = await getAuthHeaders();
+      const res = await fetch('/api/google/connect', { headers });
+      const data = await res.json();
+      if (data.authUrl) {
+        window.location.href = data.authUrl;
+      } else {
+        setGoogleMessage({ type: 'error', text: data.error || 'Error al generar enlace de conexión.' });
+        setGoogleLoading(false);
+      }
+    } catch (err) {
+      setGoogleMessage({ type: 'error', text: 'Error de red al conectar con Google.' });
+      setGoogleLoading(false);
+    }
+  };
+
+  const handleGoogleDisconnect = async () => {
+    if (!confirm('¿Deseas desconectar tu Google Calendar? Se eliminarán los datos de disponibilidad vinculados.')) return;
+    setGoogleLoading(true);
+    try {
+      const headers = await getAuthHeaders();
+      const res = await fetch('/api/google/disconnect', { method: 'DELETE', headers });
+      const data = await res.json();
+      if (data.success) {
+        setGoogleConnected(false);
+        setGoogleEmail('');
+        setGoogleCalendars([]);
+        setGoogleMessage({ type: 'success', text: 'Google Calendar desconectado correctamente.' });
+      }
+    } catch (err) {
+      setGoogleMessage({ type: 'error', text: 'Error al desconectar Google Calendar.' });
+    } finally {
+      setGoogleLoading(false);
+    }
+  };
+
+  const handleToggleCalendar = async (calendarId: string, currentActive: boolean) => {
+    try {
+      const headers = await getAuthHeaders();
+      await fetch('/api/google/calendars', {
+        method: 'PATCH',
+        headers,
+        body: JSON.stringify({ calendarId, isActive: !currentActive }),
+      });
+      setGoogleCalendars((prev) =>
+        prev.map((cal) =>
+          cal.calendar_id === calendarId ? { ...cal, is_active: !currentActive } : cal
+        )
+      );
+    } catch (err) {
+      console.error('Error toggling calendar:', err);
+    }
+  };
 
   const handleToggleInquiries = () => {
     const val = !notifyInquiries;
@@ -281,6 +394,7 @@ export default function Perfil() {
 
   useEffect(() => {
     fetchProfileAndOrg();
+    fetchGoogleCalendars();
   }, []);
 
   const handleRecharge = async (e: React.FormEvent) => {
@@ -672,6 +786,128 @@ export default function Perfil() {
                 <span>Recargar Créditos</span>
               </button>
             </form>
+          </section>
+
+          {/* Column 3b: Google Calendar Integration (6/12 width) */}
+          <section className="col-span-12 lg:col-span-6 bg-surface-container-lowest rounded-xl p-8 shadow-[0px_4px_12px_rgba(0,0,0,0.03)] border border-outline-variant/10 flex flex-col justify-between">
+            <div>
+              <div className="flex items-center justify-between mb-4 border-b border-outline-variant/25 pb-3">
+                <h3 className="font-headline-sm text-headline-sm text-on-surface font-bold flex items-center gap-2">
+                  <CalendarSync className="w-5 h-5 text-primary" />
+                  <span>Google Calendar</span>
+                </h3>
+                {googleConnected && (
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-green-100 text-green-700 rounded-full text-[11px] font-bold">
+                    <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"></span>
+                    Conectado
+                  </span>
+                )}
+              </div>
+
+              {/* Google status message */}
+              {googleMessage && (
+                <div className={`mb-4 px-3 py-2 rounded-lg text-xs font-medium ${
+                  googleMessage.type === 'success' 
+                    ? 'bg-green-50 text-green-700 border border-green-200' 
+                    : 'bg-red-50 text-red-700 border border-red-200'
+                }`}>
+                  {googleMessage.text}
+                  <button 
+                    onClick={() => setGoogleMessage(null)}
+                    className="ml-2 text-current opacity-60 hover:opacity-100 cursor-pointer"
+                  >
+                    ✕
+                  </button>
+                </div>
+              )}
+
+              {!googleConnected ? (
+                /* Disconnected state */
+                <div className="space-y-4">
+                  <p className="text-body-sm text-on-surface-variant text-sm">
+                    Conecta tu Google Calendar para ver tu disponibilidad directamente en el calendario de PsicFlow.
+                  </p>
+                  <div className="bg-primary-container/10 border border-primary/10 rounded-lg p-3 text-[11px] text-on-surface-variant flex items-start gap-2">
+                    <ShieldCheck className="w-4 h-4 text-primary shrink-0 mt-0.5" />
+                    <span>Solo lectura — PsicFlow nunca modifica tu calendario de Google.</span>
+                  </div>
+                  <button
+                    onClick={handleGoogleConnect}
+                    disabled={googleLoading}
+                    className="w-full bg-primary text-on-primary hover:bg-primary-container font-bold py-3 rounded-lg text-sm flex items-center justify-center gap-2 transition-all cursor-pointer shadow-sm disabled:opacity-50"
+                  >
+                    {googleLoading ? (
+                      <RefreshCw className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <ExternalLink className="w-4 h-4" />
+                    )}
+                    <span>{googleLoading ? 'Conectando...' : 'Conectar Google Calendar'}</span>
+                  </button>
+                </div>
+              ) : (
+                /* Connected state */
+                <div className="space-y-4">
+                  <p className="text-xs text-on-surface-variant">
+                    Cuenta: <span className="font-semibold text-on-surface">{googleEmail}</span>
+                  </p>
+
+                  {/* Calendar list with toggles */}
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-primary uppercase tracking-wide">Calendarios para disponibilidad</label>
+                    <div className="max-h-48 overflow-y-auto space-y-1.5 pr-1">
+                      {googleCalendars.map((cal) => (
+                        <div 
+                          key={cal.calendar_id || cal.id}
+                          className="flex items-center justify-between p-2.5 bg-surface-container-low rounded-lg border border-outline-variant/10 hover:border-primary/20 transition-colors"
+                        >
+                          <div className="flex items-center gap-2.5 overflow-hidden">
+                            <span 
+                              className="w-3 h-3 rounded-full shrink-0 border" 
+                              style={{ backgroundColor: cal.calendar_color || '#4285f4', borderColor: cal.calendar_color || '#4285f4' }}
+                            ></span>
+                            <span className="text-xs text-on-surface truncate">{cal.calendar_name}</span>
+                          </div>
+                          <label className="relative inline-flex items-center cursor-pointer shrink-0">
+                            <input 
+                              type="checkbox" 
+                              checked={cal.is_active}
+                              onChange={() => handleToggleCalendar(cal.calendar_id, cal.is_active)}
+                              className="sr-only peer" 
+                            />
+                            <div className="w-8 h-4.5 bg-outline-variant/40 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-3.5 after:w-3.5 after:transition-all peer-checked:bg-primary"></div>
+                          </label>
+                        </div>
+                      ))}
+                      {googleCalendars.length === 0 && !googleLoading && (
+                        <p className="text-xs text-on-surface-variant text-center py-3">No se encontraron calendarios.</p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Action buttons when connected */}
+            {googleConnected && (
+              <div className="flex gap-2 mt-4 pt-4 border-t border-outline-variant/15">
+                <button
+                  onClick={fetchGoogleCalendars}
+                  disabled={googleLoading}
+                  className="flex-1 flex items-center justify-center gap-1.5 py-2 border border-outline-variant/30 text-on-surface-variant hover:bg-surface-container-low rounded-lg text-xs font-semibold transition-all cursor-pointer disabled:opacity-50"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${googleLoading ? 'animate-spin' : ''}`} />
+                  Refrescar
+                </button>
+                <button
+                  onClick={handleGoogleDisconnect}
+                  disabled={googleLoading}
+                  className="flex-1 flex items-center justify-center gap-1.5 py-2 border border-error/30 text-error hover:bg-error/5 rounded-lg text-xs font-semibold transition-all cursor-pointer disabled:opacity-50"
+                >
+                  <Unplug className="w-3.5 h-3.5" />
+                  Desconectar
+                </button>
+              </div>
+            )}
           </section>
 
           {/* Column 4: Notification Preferences & Account Security (6/12 width) */}
