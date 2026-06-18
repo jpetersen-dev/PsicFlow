@@ -49,7 +49,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   // Get Google Calendar connection
   const { data: connection } = await supabase
     .from('google_calendar_connections')
-    .select('id, google_email')
+    .select('id, google_email, clinical_calendar_id, personal_calendar_id')
     .eq('profile_id', profile.id)
     .eq('organization_id', tenantId)
     .limit(1)
@@ -74,8 +74,28 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(200).json({
       connected: true,
       googleEmail: connection.google_email,
+      clinicalCalendarId: connection.clinical_calendar_id,
+      personalCalendarId: connection.personal_calendar_id,
       calendars: selections || [],
     });
+  }
+
+  if (req.method === 'PUT') {
+    const { clinicalCalendarId, personalCalendarId } = req.body;
+
+    const { error: updateError } = await supabase
+      .from('google_calendar_connections')
+      .update({
+        clinical_calendar_id: clinicalCalendarId || null,
+        personal_calendar_id: personalCalendarId || null,
+      })
+      .eq('id', connection.id);
+
+    if (updateError) {
+      return res.status(500).json({ error: 'Error al actualizar mapeo de calendarios' });
+    }
+
+    return res.status(200).json({ success: true });
   }
 
   if (req.method === 'PATCH') {

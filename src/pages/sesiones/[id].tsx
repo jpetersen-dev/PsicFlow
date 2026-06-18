@@ -268,6 +268,24 @@ export default function SesionFicha() {
         .update({ status_session: 'Completa' })
         .eq('id', id);
 
+      const tenantId = localStorage.getItem('active-tenant-id');
+      const { data: { session: authSess } } = await supabase.auth.getSession();
+      if (authSess && tenantId) {
+        fetch('/api/google/sync-event', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${authSess.access_token}`,
+            'x-tenant-id': tenantId,
+          },
+          body: JSON.stringify({
+            type: 'session',
+            id: id,
+            action: 'update'
+          }),
+        }).catch((syncErr) => console.error('Error triggering session sync:', syncErr));
+      }
+
       alert('Nota clínica firmada y validada con éxito. El archivo de voz original ha sido destruido permanentemente de forma irreversible.');
       fetchSessionData();
     } catch (err: unknown) {
@@ -296,6 +314,25 @@ export default function SesionFicha() {
         .eq('id', id);
       
       if (error) throw error;
+
+      const tenantId = localStorage.getItem('active-tenant-id');
+      const { data: { session: authSess } } = await supabase.auth.getSession();
+      if (authSess && tenantId) {
+        fetch('/api/google/sync-event', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${authSess.access_token}`,
+            'x-tenant-id': tenantId,
+          },
+          body: JSON.stringify({
+            type: 'session',
+            id: id,
+            action: 'update'
+          }),
+        }).catch((syncErr) => console.error('Error triggering session sync:', syncErr));
+      }
+
       alert('Detalles administrativos guardados correctamente.');
       fetchSessionData();
     } catch (err: any) {

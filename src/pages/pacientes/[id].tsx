@@ -1196,7 +1196,7 @@ export default function PacienteFicha() {
                       alert('No se encontró un perfil profesional para asociar a esta clínica.');
                       return;
                     }
-                    const { error } = await supabase
+                    const { data: insertedData, error } = await supabase
                       .from('sessions')
                       .insert({
                         organization_id: tenantId,
@@ -1208,9 +1208,32 @@ export default function PacienteFicha() {
                         status_session: 'Programada',
                         value_session: 40000,
                         status_payment: 'Pendiente'
-                      });
-                    if (error) alert(error.message);
-                    else fetchFichaData();
+                      })
+                      .select('id')
+                      .single();
+                    if (error) {
+                      alert(error.message);
+                    } else {
+                      if (insertedData?.id && tenantId) {
+                        const { data: { session: authSess } } = await supabase.auth.getSession();
+                        if (authSess) {
+                          fetch('/api/google/sync-event', {
+                            method: 'POST',
+                            headers: {
+                              'Content-Type': 'application/json',
+                              'Authorization': `Bearer ${authSess.access_token}`,
+                              'x-tenant-id': tenantId,
+                            },
+                            body: JSON.stringify({
+                              type: 'session',
+                              id: insertedData.id,
+                              action: 'create'
+                            }),
+                          }).catch((syncErr) => console.error('Error triggering session sync:', syncErr));
+                        }
+                      }
+                      fetchFichaData();
+                    }
                   }}
                   className="bg-bg-input border border-border-color hover:bg-bg-card-hover text-accent-primary font-semibold px-3 py-1.5 rounded-lg text-xs flex items-center gap-1.5 transition-all"
                 >

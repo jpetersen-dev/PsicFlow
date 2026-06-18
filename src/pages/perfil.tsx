@@ -41,6 +41,8 @@ export default function Perfil() {
   const [experience, setExperience] = useState<number>(0);
   const [bio, setBio] = useState('');
   const [timezone, setTimezone] = useState('America/Santiago');
+  const [workStartHour, setWorkStartHour] = useState(8);
+  const [workEndHour, setWorkEndHour] = useState(20);
   
   // Toggles states
   const [notifyInquiries, setNotifyInquiries] = useState(true);
@@ -51,6 +53,8 @@ export default function Perfil() {
   const [googleConnected, setGoogleConnected] = useState(false);
   const [googleEmail, setGoogleEmail] = useState('');
   const [googleCalendars, setGoogleCalendars] = useState<any[]>([]);
+  const [clinicalCalendarId, setClinicalCalendarId] = useState<string | null>(null);
+  const [personalCalendarId, setPersonalCalendarId] = useState<string | null>(null);
   const [googleLoading, setGoogleLoading] = useState(false);
   const [googleMessage, setGoogleMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
@@ -102,12 +106,35 @@ export default function Perfil() {
       setGoogleConnected(data.connected || false);
       setGoogleEmail(data.googleEmail || '');
       setGoogleCalendars(data.calendars || []);
+      setClinicalCalendarId(data.clinicalCalendarId || null);
+      setPersonalCalendarId(data.personalCalendarId || null);
     } catch (err) {
       console.error('Error fetching Google calendars:', err);
     } finally {
       setGoogleLoading(false);
     }
   }, []);
+
+  const handleSaveCalendarMapping = async (clinicalId: string | null, personalId: string | null) => {
+    try {
+      const headers = await getAuthHeaders();
+      const res = await fetch('/api/google/calendars', {
+        method: 'PUT',
+        headers,
+        body: JSON.stringify({
+          clinicalCalendarId: clinicalId,
+          personalCalendarId: personalId,
+        }),
+      });
+
+      if (!res.ok) {
+        throw new Error('Error al actualizar el mapeo de calendarios');
+      }
+    } catch (err: any) {
+      console.error('Error saving mapping:', err);
+      alert('Error al guardar el mapeo de calendarios: ' + err.message);
+    }
+  };
 
   const handleGoogleConnect = async () => {
     setGoogleLoading(true);
@@ -246,6 +273,8 @@ export default function Perfil() {
         if (profData.experience !== undefined && profData.experience !== null) setExperience(profData.experience);
         if (profData.bio) setBio(profData.bio);
         if (profData.timezone) setTimezone(profData.timezone);
+        if (profData.work_start_hour !== undefined && profData.work_start_hour !== null) setWorkStartHour(profData.work_start_hour);
+        if (profData.work_end_hour !== undefined && profData.work_end_hour !== null) setWorkEndHour(profData.work_end_hour);
       }
 
       // Get organization details
@@ -447,7 +476,9 @@ export default function Perfil() {
           specialization,
           experience: Number(experience),
           bio,
-          timezone
+          timezone,
+          work_start_hour: Number(workStartHour),
+          work_end_hour: Number(workEndHour)
         })
         .eq('id', profile.id);
 
@@ -623,6 +654,33 @@ export default function Perfil() {
                       onChange={(e) => setExperience(Number(e.target.value))}
                       className="w-full bg-surface-container-low border border-outline-variant/20 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary/20 focus:outline-none" 
                     />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="space-y-2">
+                    <label className="font-label-md text-on-surface-variant text-xs">Inicio de Jornada Laboral</label>
+                    <select
+                      value={workStartHour}
+                      onChange={(e) => setWorkStartHour(Number(e.target.value))}
+                      className="w-full bg-surface-container-low border border-outline-variant/20 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary/20 focus:outline-none cursor-pointer"
+                    >
+                      {Array.from({ length: 24 }, (_, i) => (
+                        <option key={i} value={i}>{String(i).padStart(2, '0')}:00 hrs</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="space-y-2">
+                    <label className="font-label-md text-on-surface-variant text-xs">Fin de Jornada Laboral</label>
+                    <select
+                      value={workEndHour}
+                      onChange={(e) => setWorkEndHour(Number(e.target.value))}
+                      className="w-full bg-surface-container-low border border-outline-variant/20 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary/20 focus:outline-none cursor-pointer"
+                    >
+                      {Array.from({ length: 24 }, (_, i) => (
+                        <option key={i} value={i}>{String(i).padStart(2, '0')}:00 hrs</option>
+                      ))}
+                    </select>
                   </div>
                 </div>
 
@@ -885,6 +943,48 @@ export default function Perfil() {
                       {googleCalendars.length === 0 && !googleLoading && (
                         <p className="text-xs text-on-surface-variant text-center py-3">No se encontraron calendarios.</p>
                       )}
+                    </div>
+                  </div>
+
+                  {/* Mapeo de Calendarios */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-3 pt-3 border-t border-outline-variant/15">
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-bold text-primary uppercase tracking-wide">Calendario para Citas Clínicas</label>
+                      <select
+                        value={clinicalCalendarId || ''}
+                        onChange={async (e) => {
+                          const val = e.target.value || null;
+                          setClinicalCalendarId(val);
+                          await handleSaveCalendarMapping(val, personalCalendarId);
+                        }}
+                        className="w-full bg-surface-container-low border border-outline-variant/30 rounded-lg px-2.5 py-1.5 text-xs text-on-surface focus:border-primary focus:outline-none cursor-pointer"
+                      >
+                        <option value="">No guardar en Google</option>
+                        {googleCalendars.map((cal) => (
+                          <option key={cal.calendar_id || cal.id} value={cal.calendar_id}>
+                            {cal.calendar_name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-bold text-primary uppercase tracking-wide">Calendario para Eventos Personales</label>
+                      <select
+                        value={personalCalendarId || ''}
+                        onChange={async (e) => {
+                          const val = e.target.value || null;
+                          setPersonalCalendarId(val);
+                          await handleSaveCalendarMapping(clinicalCalendarId, val);
+                        }}
+                        className="w-full bg-surface-container-low border border-outline-variant/30 rounded-lg px-2.5 py-1.5 text-xs text-on-surface focus:border-primary focus:outline-none cursor-pointer"
+                      >
+                        <option value="">No guardar en Google</option>
+                        {googleCalendars.map((cal) => (
+                          <option key={cal.calendar_id || cal.id} value={cal.calendar_id}>
+                            {cal.calendar_name}
+                          </option>
+                        ))}
+                      </select>
                     </div>
                   </div>
 

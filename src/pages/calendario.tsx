@@ -350,7 +350,7 @@ export default function Calendario() {
       return;
     }
     try {
-      const { error } = await supabase
+      const { data: insertedData, error } = await supabase
         .from('personal_events')
         .insert({
           organization_id: tenantId,
@@ -360,9 +360,31 @@ export default function Calendario() {
           event_date: eventDate,
           start_time: eventStartTime + ':00',
           end_time: eventEndTime + ':00'
-        });
+        })
+        .select('id')
+        .single();
 
       if (error) throw error;
+
+      if (insertedData?.id) {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session) {
+          fetch('/api/google/sync-event', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${session.access_token}`,
+              'x-tenant-id': tenantId,
+            },
+            body: JSON.stringify({
+              type: 'event',
+              id: insertedData.id,
+              action: 'create'
+            }),
+          }).catch((syncErr) => console.error('Error triggering event sync:', syncErr));
+        }
+      }
+
       alert('Actividad/Evento creado exitosamente.');
       setEventTitle('');
       setEventDescription('');
@@ -376,6 +398,23 @@ export default function Calendario() {
   const handleDeletePersonalEvent = async (id: string) => {
     if (!confirm('¿Deseas eliminar este evento personal?')) return;
     try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session && tenantId) {
+        await fetch('/api/google/sync-event', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${session.access_token}`,
+            'x-tenant-id': tenantId,
+          },
+          body: JSON.stringify({
+            type: 'event',
+            id: id,
+            action: 'delete'
+          }),
+        }).catch((syncErr) => console.error('Error triggering event deletion sync:', syncErr));
+      }
+
       const { error } = await supabase
         .from('personal_events')
         .delete()

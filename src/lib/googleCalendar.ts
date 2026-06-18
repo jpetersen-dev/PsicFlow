@@ -4,6 +4,7 @@ import crypto from 'crypto';
 const SCOPES = [
   'https://www.googleapis.com/auth/calendar.readonly',
   'https://www.googleapis.com/auth/calendar.freebusy',
+  'https://www.googleapis.com/auth/calendar.events',
   'https://www.googleapis.com/auth/userinfo.email',
 ];
 
@@ -222,6 +223,94 @@ export function parseOAuthState(state: string): { profileId: string; orgId: stri
     return { profileId, orgId };
   } catch {
     return null;
+  }
+}
+
+/**
+ * Creates an event in Google Calendar.
+ */
+export async function createGoogleEvent(
+  refreshToken: string,
+  calendarId: string,
+  event: {
+    summary: string;
+    description?: string;
+    start: string; // YYYY-MM-DDTHH:mm:ss
+    end: string;   // YYYY-MM-DDTHH:mm:ss
+    timeZone: string;
+  }
+): Promise<string> {
+  const calendar = getCalendarClient(refreshToken);
+  const response = await calendar.events.insert({
+    calendarId,
+    requestBody: {
+      summary: event.summary,
+      description: event.description,
+      start: {
+        dateTime: event.start,
+        timeZone: event.timeZone,
+      },
+      end: {
+        dateTime: event.end,
+        timeZone: event.timeZone,
+      },
+    },
+  });
+  return response.data.id || '';
+}
+
+/**
+ * Updates an existing event in Google Calendar.
+ */
+export async function updateGoogleEvent(
+  refreshToken: string,
+  calendarId: string,
+  eventId: string,
+  event: {
+    summary: string;
+    description?: string;
+    start: string;
+    end: string;
+    timeZone: string;
+  }
+): Promise<void> {
+  const calendar = getCalendarClient(refreshToken);
+  await calendar.events.update({
+    calendarId,
+    eventId,
+    requestBody: {
+      summary: event.summary,
+      description: event.description,
+      start: {
+        dateTime: event.start,
+        timeZone: event.timeZone,
+      },
+      end: {
+        dateTime: event.end,
+        timeZone: event.timeZone,
+      },
+    },
+  });
+}
+
+/**
+ * Deletes an event in Google Calendar.
+ */
+export async function deleteGoogleEvent(
+  refreshToken: string,
+  calendarId: string,
+  eventId: string
+): Promise<void> {
+  const calendar = getCalendarClient(refreshToken);
+  try {
+    await calendar.events.delete({
+      calendarId,
+      eventId,
+    });
+  } catch (err: any) {
+    if (err.code !== 410 && err.code !== 404) {
+      throw err;
+    }
   }
 }
 

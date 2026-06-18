@@ -47,10 +47,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(401).json({ error: 'Sesión inválida' });
     }
 
-    // Get profile with timezone
+    // Get profile with timezone and working hours
     const { data: profile } = await supabase
       .from('profiles')
-      .select('id, timezone')
+      .select('id, timezone, work_start_hour, work_end_hour')
       .eq('user_id', user.id)
       .eq('organization_id', tenantId)
       .limit(1)
@@ -61,6 +61,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     const tz = profile.timezone || 'America/Santiago';
+    const dayStart = profile.work_start_hour !== undefined && profile.work_start_hour !== null ? profile.work_start_hour : dayStartHour;
+    const dayEnd = profile.work_end_hour !== undefined && profile.work_end_hour !== null ? profile.work_end_hour : dayEndHour;
 
     // 1. Fetch internal PsicFlow sessions for this date
     const { data: internalSessions } = await supabase
@@ -142,9 +144,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           activeCalendars.map((c) => [c.calendar_id, c.calendar_name])
         );
 
-        // Build time range for the given date in the user's timezone
-        // Google FreeBusy API requires RFC3339 timestamps
-        // We pass the timeZone in the request body, so Google handles conversion
         const timeMin = `${date}T00:00:00Z`;
         const timeMax = `${date}T23:59:59Z`;
 
@@ -160,7 +159,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           for (const result of freeBusyResults) {
             const calName = calendarNameMap[result.calendarId] || 'Google';
             for (const block of result.busy) {
-              // Convert UTC timestamps to local timezone
               const bStart = new Date(block.start);
               const bEnd = new Date(block.end);
               const startLocal = bStart.toLocaleTimeString('en-GB', { timeZone: tz, hour: '2-digit', minute: '2-digit', hour12: false });
@@ -175,18 +173,36 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           }
         } catch (googleErr: any) {
           console.error('Error querying Google FreeBusy:', googleErr.message);
-          // Continue without Google data — graceful degradation
         }
       }
     }
 
+    // Deduplicate Google busy blocks that overlap with internal PsicFlow events
+    const toMins = (timeStr: string) => {
+      const [h, m] = timeStr.split(':').map(Number);
+      return h * 60 + m;
+    };
+
+    const deduplicatedGoogleBusy = googleBusy.filter((gb) => {
+      const gbStart = toMins(gb.start);
+      const gbEnd = toMins(gb.end);
+
+      const isDuplicate = internalBusy.some((ib) => {
+        const ibStart = toMins(ib.start);
+        const ibEnd = toMins(ib.end);
+        return gbStart < ibEnd && ibStart < gbEnd;
+      });
+
+      return !isDuplicate;
+    });
+
     // 4. Combine all busy blocks and compute available slots
     const allBusy = [
       ...internalBusy.map((b) => ({ start: `${date}T${b.start}:00`, end: `${date}T${b.end}:00` })),
-      ...googleBusy.map((b) => ({ start: `${date}T${b.start}:00`, end: `${date}T${b.end}:00` })),
+      ...deduplicatedGoogleBusy.map((b) => ({ start: `${date}T${b.start}:00`, end: `${date}T${b.end}:00` })),
     ];
 
-    const availableSlots = computeAvailableSlots(allBusy, dayStartHour, dayEndHour, date);
+    const availableSlots = computeAvailableSlots(allBusy, dayStart, dayEnd, date);
 
     // 5. Build unified timeline
     const timeline = [
@@ -197,7 +213,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         source: b.source as string,
         type: 'busy' as const,
       })),
-      ...googleBusy.map((b) => ({
+      ...deduplicatedGoogleBusy.map((b) => ({
         start: b.start,
         end: b.end,
         label: b.label,
@@ -217,7 +233,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       date,
       googleConnected,
       timeline,
-      busyCount: internalBusy.length + googleBusy.length,
+      busyCount: internalBusy.length + deduplicatedGoogleBusy.length,
       availableCount: availableSlots.length,
     });
   } catch (err: any) {

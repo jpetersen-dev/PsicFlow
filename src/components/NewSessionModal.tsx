@@ -114,7 +114,7 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({ isOpen, onClos
         throw new Error('Debes seleccionar un paciente.');
       }
 
-      const { error: insertErr } = await supabase
+      const { data: insertedData, error: insertErr } = await supabase
         .from('sessions')
         .insert({
           organization_id: activeTenant,
@@ -128,10 +128,31 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({ isOpen, onClos
           status_payment: 'Pendiente',
           boleta_status: 'Pendiente',
           comentarios_internos: formData.comentarios_internos
-        });
+        })
+        .select('id')
+        .single();
 
       if (insertErr) {
         throw new Error(insertErr.message);
+      }
+
+      if (insertedData?.id) {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session) {
+          fetch('/api/google/sync-event', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${session.access_token}`,
+              'x-tenant-id': activeTenant,
+            },
+            body: JSON.stringify({
+              type: 'session',
+              id: insertedData.id,
+              action: 'create'
+            }),
+          }).catch((syncErr) => console.error('Error triggering session sync:', syncErr));
+        }
       }
 
       onSuccess();
