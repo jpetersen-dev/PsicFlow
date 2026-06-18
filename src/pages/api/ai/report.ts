@@ -2,7 +2,7 @@ import type { NextApiRequest, NextApiResponse } from 'next';
 import { createClient } from '@supabase/supabase-js';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
-const supabaseServiceKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
 
 /**
  * POST /api/ai/report
@@ -30,42 +30,33 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(400).json({ error: 'patient_name is required.' });
     }
 
-    const supabase = createClient(supabaseUrl, supabaseServiceKey, {
+    const supabase = createClient(supabaseUrl, supabaseAnonKey, {
       global: { headers: { 'x-tenant-id': tenantId } },
     });
 
-    // 1. Resolve professional profile using Authorization header if present
+    // 1. Resolve professional profile — require valid auth
     const authHeader = req.headers.authorization;
-    let profile: any = null;
-
-    if (authHeader && authHeader.startsWith('Bearer ')) {
-      const token = authHeader.substring(7);
-      const { data: { user }, error: userErr } = await supabase.auth.getUser(token);
-      if (!userErr && user) {
-        const { data: profiles } = await supabase
-          .from('profiles')
-          .select('id, full_name')
-          .eq('user_id', user.id)
-          .eq('organization_id', tenantId)
-          .limit(1);
-        if (profiles && profiles.length > 0) {
-          profile = profiles[0];
-        }
-      }
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return res.status(401).json({ error: 'No autorizado. Se requiere token de autenticación.' });
     }
 
-    if (!profile) {
-      // Fallback for compatibility/demo
-      const { data: profiles, error: profileErr } = await supabase
-        .from('profiles')
-        .select('id, full_name')
-        .limit(1);
-
-      if (profileErr || !profiles || profiles.length === 0) {
-        return res.status(404).json({ error: 'No se encontró un perfil profesional para esta organización.' });
-      }
-      profile = profiles[0];
+    const token = authHeader.substring(7);
+    const { data: { user }, error: userErr } = await supabase.auth.getUser(token);
+    if (userErr || !user) {
+      return res.status(401).json({ error: 'Sesión inválida o expirada.' });
     }
+
+    const { data: profiles } = await supabase
+      .from('profiles')
+      .select('id, full_name')
+      .eq('user_id', user.id)
+      .eq('organization_id', tenantId)
+      .limit(1);
+
+    if (!profiles || profiles.length === 0) {
+      return res.status(404).json({ error: 'No se encontró un perfil profesional para esta organización.' });
+    }
+    const profile = profiles[0];
 
     // 2. Validate credit balance for INFORME_CLINICO
     const { data: ledgerData, error: ledgerErr } = await supabase
@@ -97,7 +88,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       });
 
     if (deductErr) {
-      return res.status(500).json({ error: 'Error al debitar crédito: ' + deductErr.message });
+      console.error('Error deducting credit:', deductErr);
+      return res.status(500).json({ error: 'Error al debitar crédito. Contacte soporte.' });
     }
 
     // 4. Build context from selected notes
@@ -163,8 +155,8 @@ Genera un informe clínico profesional completo que incluya:
       report,
     });
   } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : 'Error interno del servidor';
-    return res.status(500).json({ error: message });
+    console.error('Error in /api/ai/report:', err);
+    return res.status(500).json({ error: 'Error interno del servidor.' });
   }
 }
 

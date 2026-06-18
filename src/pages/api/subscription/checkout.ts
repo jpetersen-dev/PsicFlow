@@ -35,7 +35,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     // 3. Generate a secure unique token
-    const token = 'invite-' + Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+    const token = 'invite-' + randomUUID().replace(/-/g, '');
 
     // 4. Create invitation using tenant header to pass RLS policy
     const supabaseTenant = createClient(supabaseUrl, supabaseAnonKey, {

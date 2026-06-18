@@ -1,4 +1,5 @@
 import { google } from 'googleapis';
+import crypto from 'crypto';
 
 const SCOPES = [
   'https://www.googleapis.com/auth/calendar.readonly',
@@ -162,26 +163,38 @@ export function computeAvailableSlots(
 }
 
 /**
- * Creates a signed state string for OAuth2 CSRF protection.
- * Uses a simple HMAC with the Supabase anon key as secret.
+ * Creates an HMAC-signed state string for OAuth2 CSRF protection.
+ * Uses GOOGLE_CLIENT_SECRET as the signing key.
  */
 export function createOAuthState(profileId: string, orgId: string): string {
-  // Use a simple base64 encoding with a timestamp for basic CSRF protection
   const payload = JSON.stringify({
     profileId,
     orgId,
     ts: Date.now(),
   });
-  return Buffer.from(payload).toString('base64url');
+  const payloadB64 = Buffer.from(payload).toString('base64url');
+  const secret = process.env.GOOGLE_CLIENT_SECRET || 'fallback-secret';
+  const signature = crypto.createHmac('sha256', secret).update(payloadB64).digest('base64url');
+  return `${payloadB64}.${signature}`;
 }
 
 /**
- * Decodes and validates the OAuth state string.
- * Returns null if invalid or expired (>10 minutes).
+ * Decodes and validates the HMAC-signed OAuth state string.
+ * Returns null if invalid, tampered, or expired (>10 minutes).
  */
 export function parseOAuthState(state: string): { profileId: string; orgId: string } | null {
   try {
-    const payload = JSON.parse(Buffer.from(state, 'base64url').toString());
+    const [payloadB64, signature] = state.split('.');
+    if (!payloadB64 || !signature) return null;
+
+    // Verify HMAC signature
+    const secret = process.env.GOOGLE_CLIENT_SECRET || 'fallback-secret';
+    const expectedSig = crypto.createHmac('sha256', secret).update(payloadB64).digest('base64url');
+    if (!crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expectedSig))) {
+      return null;
+    }
+
+    const payload = JSON.parse(Buffer.from(payloadB64, 'base64url').toString());
     const { profileId, orgId, ts } = payload;
 
     // Validate timestamp (10 minute window)
