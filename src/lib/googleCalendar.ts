@@ -82,7 +82,8 @@ export async function queryFreeBusy(
   refreshToken: string,
   calendarIds: string[],
   timeMin: string,
-  timeMax: string
+  timeMax: string,
+  timeZone: string = 'America/Santiago'
 ): Promise<{ calendarId: string; busy: { start: string; end: string }[] }[]> {
   const calendarClient = getCalendarClient(refreshToken);
 
@@ -90,6 +91,7 @@ export async function queryFreeBusy(
     requestBody: {
       timeMin,
       timeMax,
+      timeZone,
       items: calendarIds.map((id) => ({ id })),
     },
   });

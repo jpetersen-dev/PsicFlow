@@ -47,10 +47,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(401).json({ error: 'Sesión inválida' });
     }
 
-    // Get profile
+    // Get profile with timezone
     const { data: profile } = await supabase
       .from('profiles')
-      .select('id')
+      .select('id, timezone')
       .eq('user_id', user.id)
       .eq('organization_id', tenantId)
       .limit(1)
@@ -59,6 +59,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (!profile) {
       return res.status(404).json({ error: 'Perfil no encontrado' });
     }
+
+    const tz = profile.timezone || 'America/Santiago';
 
     // 1. Fetch internal PsicFlow sessions for this date
     const { data: internalSessions } = await supabase
@@ -140,26 +142,42 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           activeCalendars.map((c) => [c.calendar_id, c.calendar_name])
         );
 
-        // Build time range for the given date (full day in UTC-4 Chile)
-        const timeMin = `${date}T00:00:00-04:00`;
-        const timeMax = `${date}T23:59:59-04:00`;
+        // Build time range for the given date in the user's timezone
+        // Create start/end timestamps using the IANA timezone
+        const dayStart = new Date(`${date}T00:00:00`);
+        const dayEnd = new Date(`${date}T23:59:59`);
+        // Format with timezone offset for Google API
+        const fmt = new Intl.DateTimeFormat('en-CA', {
+          timeZone: tz,
+          year: 'numeric', month: '2-digit', day: '2-digit',
+          hour: '2-digit', minute: '2-digit', second: '2-digit',
+          hour12: false,
+          timeZoneName: 'longOffset',
+        });
+        // Use ISO format with timezone for Google FreeBusy
+        const timeMin = `${date}T00:00:00`;
+        const timeMax = `${date}T23:59:59`;
 
         try {
           const freeBusyResults = await queryFreeBusy(
             connection.refresh_token,
             calendarIds,
             timeMin,
-            timeMax
+            timeMax,
+            tz
           );
 
           for (const result of freeBusyResults) {
             const calName = calendarNameMap[result.calendarId] || 'Google';
             for (const block of result.busy) {
+              // Convert UTC timestamps to local timezone
               const bStart = new Date(block.start);
               const bEnd = new Date(block.end);
+              const startLocal = bStart.toLocaleTimeString('en-GB', { timeZone: tz, hour: '2-digit', minute: '2-digit', hour12: false });
+              const endLocal = bEnd.toLocaleTimeString('en-GB', { timeZone: tz, hour: '2-digit', minute: '2-digit', hour12: false });
               googleBusy.push({
-                start: `${String(bStart.getHours()).padStart(2, '0')}:${String(bStart.getMinutes()).padStart(2, '0')}`,
-                end: `${String(bEnd.getHours()).padStart(2, '0')}:${String(bEnd.getMinutes()).padStart(2, '0')}`,
+                start: startLocal,
+                end: endLocal,
                 label: calName,
                 source: 'google',
               });

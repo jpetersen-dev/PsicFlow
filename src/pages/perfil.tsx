@@ -17,7 +17,8 @@ import {
   Unplug,
   RefreshCw,
   ExternalLink,
-  Check
+  Check,
+  Globe
 } from 'lucide-react';
 import { supabase } from '../lib/supabaseClient';
 
@@ -39,6 +40,7 @@ export default function Perfil() {
   const [specialization, setSpecialization] = useState('');
   const [experience, setExperience] = useState<number>(0);
   const [bio, setBio] = useState('');
+  const [timezone, setTimezone] = useState('America/Santiago');
   
   // Toggles states
   const [notifyInquiries, setNotifyInquiries] = useState(true);
@@ -243,6 +245,7 @@ export default function Perfil() {
         if (profData.specialization) setSpecialization(profData.specialization);
         if (profData.experience !== undefined && profData.experience !== null) setExperience(profData.experience);
         if (profData.bio) setBio(profData.bio);
+        if (profData.timezone) setTimezone(profData.timezone);
       }
 
       // Get organization details
@@ -443,7 +446,8 @@ export default function Perfil() {
           email: email.trim().toLowerCase(),
           specialization,
           experience: Number(experience),
-          bio
+          bio,
+          timezone
         })
         .eq('id', profile.id);
 
@@ -882,6 +886,43 @@ export default function Perfil() {
                         <p className="text-xs text-on-surface-variant text-center py-3">No se encontraron calendarios.</p>
                       )}
                     </div>
+                  </div>
+
+                  {/* Timezone selector */}
+                  <div className="space-y-1 mt-3 pt-3 border-t border-outline-variant/15">
+                    <label className="text-[10px] font-bold text-primary uppercase tracking-wide flex items-center gap-1">
+                      <Globe className="w-3 h-3" />
+                      Zona Horaria
+                    </label>
+                    <select
+                      value={timezone}
+                      onChange={async (e) => {
+                        const tz = e.target.value;
+                        setTimezone(tz);
+                        if (profile) {
+                          await supabase.from('profiles').update({ timezone: tz }).eq('id', profile.id);
+                        }
+                      }}
+                      className="w-full bg-surface-container-low border border-outline-variant/30 rounded-lg px-3 py-2 text-xs text-on-surface focus:border-primary focus:outline-none transition-colors cursor-pointer"
+                    >
+                      <optgroup label="América">
+                        <option value="America/Santiago">🇨🇱 Chile (Santiago) UTC-4</option>
+                        <option value="America/Punta_Arenas">🇨🇱 Chile (Magallanes) UTC-3</option>
+                        <option value="America/Argentina/Buenos_Aires">🇦🇷 Argentina UTC-3</option>
+                        <option value="America/Bogota">🇨🇴 Colombia UTC-5</option>
+                        <option value="America/Lima">🇵🇪 Perú UTC-5</option>
+                        <option value="America/Mexico_City">🇲🇽 México (CDMX) UTC-6</option>
+                        <option value="America/New_York">🇺🇸 Este (NY) UTC-5</option>
+                        <option value="America/Los_Angeles">🇺🇸 Pacífico (LA) UTC-8</option>
+                        <option value="America/Sao_Paulo">🇧🇷 Brasil (São Paulo) UTC-3</option>
+                        <option value="America/Montevideo">🇺🇾 Uruguay UTC-3</option>
+                      </optgroup>
+                      <optgroup label="Europa">
+                        <option value="Europe/Madrid">🇪🇸 España UTC+1</option>
+                        <option value="Europe/London">🇬🇧 Londres UTC+0</option>
+                        <option value="Europe/Berlin">🇩🇪 Alemania UTC+1</option>
+                      </optgroup>
+                    </select>
                   </div>
                 </div>
               )}
