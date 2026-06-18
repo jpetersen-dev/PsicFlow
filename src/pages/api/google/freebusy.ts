@@ -143,20 +143,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         );
 
         // Build time range for the given date in the user's timezone
-        // Create start/end timestamps using the IANA timezone
-        const dayStart = new Date(`${date}T00:00:00`);
-        const dayEnd = new Date(`${date}T23:59:59`);
-        // Format with timezone offset for Google API
-        const fmt = new Intl.DateTimeFormat('en-CA', {
-          timeZone: tz,
-          year: 'numeric', month: '2-digit', day: '2-digit',
-          hour: '2-digit', minute: '2-digit', second: '2-digit',
-          hour12: false,
-          timeZoneName: 'longOffset',
-        });
-        // Use ISO format with timezone for Google FreeBusy
-        const timeMin = `${date}T00:00:00`;
-        const timeMax = `${date}T23:59:59`;
+        // Google FreeBusy API requires RFC3339 timestamps
+        // We pass the timeZone in the request body, so Google handles conversion
+        const timeMin = `${date}T00:00:00Z`;
+        const timeMax = `${date}T23:59:59Z`;
 
         try {
           const freeBusyResults = await queryFreeBusy(
