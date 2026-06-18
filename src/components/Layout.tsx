@@ -215,7 +215,7 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
         {/* Sidebar Header */}
         <div className="h-16 flex items-center justify-between px-4 border-b border-border-color bg-bg-sidebar">
           <Link href="/dashboard" className="flex items-center gap-2 font-bold text-lg text-accent-primary">
-            <Building2 className="w-6 h-6" />
+            <img src="/logo_psicflow.svg" alt="PsicFlow" className="w-7 h-7" />
             <span className={sidebarOpen ? 'block' : 'hidden md:hidden'}>PsicFlow</span>
           </Link>
           <button onClick={() => setSidebarOpen(false)} className="md:hidden text-text-secondary hover:text-text-primary">

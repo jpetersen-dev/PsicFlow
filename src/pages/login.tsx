@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import Head from 'next/head';
 import { useRouter } from 'next/router';
 import { 
-  Building2, 
+
   Mail, 
   Lock, 
   AlertTriangle, 
@@ -162,11 +162,9 @@ export default function Login() {
         ) : (
           <>
             <div className="text-center space-y-2">
-              <div className="inline-flex p-3 bg-accent-primary/10 text-accent-primary rounded-2xl mb-2">
-                <Building2 className="w-8 h-8" />
-              </div>
-              <h1 className="text-2xl font-bold tracking-tight text-text-primary">Acceso Clínico</h1>
-              <p className="text-sm text-text-secondary">Ingresa a tu ecosistema de gestión PsicFlow</p>
+              <img src="/logo_psicflow.svg" alt="PsicFlow" className="w-16 h-16 mb-2 mx-auto" />
+              <h1 className="text-2xl font-bold tracking-tight text-text-primary">PsicFlow</h1>
+              <p className="text-sm text-text-secondary">Ingresa a tu ecosistema de gestión clínica</p>
             </div>
 
             {error && (
