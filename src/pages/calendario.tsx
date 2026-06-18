@@ -71,6 +71,15 @@ export default function Calendario() {
   const [googleConnected, setGoogleConnected] = useState(false);
   const [availabilityCache, setAvailabilityCache] = useState<Record<string, any>>({}); 
 
+  // For prefilled values when agendamiento occurs via slot click
+  const [sessionDefaultDate, setSessionDefaultDate] = useState('');
+  const [sessionDefaultTime, setSessionDefaultTime] = useState('');
+
+  // Event selector modal states
+  const [isSelectorModalOpen, setIsSelectorModalOpen] = useState(false);
+  const [selectedSlotStart, setSelectedSlotStart] = useState('');
+  const [selectedSlotEnd, setSelectedSlotEnd] = useState('');
+
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleFileAttach = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -643,23 +652,7 @@ export default function Calendario() {
                 </button>
               </div>
 
-              {/* Add Buttons */}
-              <div className="flex gap-2">
-                <button
-                  onClick={() => setIsNewEventOpen(true)}
-                  className="bg-secondary-container text-on-secondary-container px-3 py-2 rounded-lg font-label-sm flex items-center gap-1.5 shadow-sm border border-outline-variant/30 hover:bg-surface-container-high active:scale-95 transition-all cursor-pointer text-xs font-semibold"
-                >
-                  <Briefcase className="w-3.5 h-3.5" />
-                  <span>Evento Personal</span>
-                </button>
-                <button
-                  onClick={() => setIsNewSessionOpen(true)}
-                  className="bg-primary text-on-primary px-3 py-2 rounded-lg font-label-sm flex items-center gap-1.5 shadow-sm hover:bg-primary-container active:scale-95 transition-all cursor-pointer text-xs font-semibold"
-                >
-                  <Plus className="w-3.5 h-3.5" />
-                  <span>Cita Clínica</span>
-                </button>
-              </div>
+
             </div>
           </div>
 
@@ -1024,12 +1017,24 @@ export default function Calendario() {
                         {isAvailable ? '✓ Disponible' : block.label}
                       </span>
 
-                      {/* Source badge */}
-                      {isGoogle && (
+                      {/* Plus button / Source badge */}
+                      {isAvailable ? (
+                        <button
+                          onClick={() => {
+                            setSelectedSlotStart(block.start);
+                            setSelectedSlotEnd(block.end);
+                            setIsSelectorModalOpen(true);
+                          }}
+                          className="ml-auto p-1 bg-green-200/40 hover:bg-green-200 text-green-700 rounded transition-colors cursor-pointer flex items-center justify-center"
+                          title="Agendar en este horario"
+                        >
+                          <Plus className="w-3 h-3" />
+                        </button>
+                      ) : isGoogle ? (
                         <span className="ml-auto px-1.5 py-0.5 bg-orange-100 text-orange-600 rounded text-[9px] font-bold shrink-0">
                           G
                         </span>
-                      )}
+                      ) : null}
                     </div>
                   );
                 })}
@@ -1184,7 +1189,70 @@ export default function Calendario() {
         isOpen={isNewSessionOpen}
         onClose={() => setIsNewSessionOpen(false)}
         onSuccess={loadAllCalendarData}
+        defaultDate={sessionDefaultDate}
+        defaultTime={sessionDefaultTime}
       />
+
+      {/* MODAL: SELECCIONAR TIPO DE EVENTO */}
+      {isSelectorModalOpen && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-surface-container-lowest rounded-2xl max-w-sm w-full shadow-2xl border border-outline-variant/30 overflow-hidden p-6 space-y-5">
+            <div className="flex justify-between items-center pb-2 border-b border-outline-variant/15">
+              <h3 className="text-sm font-bold text-on-surface flex items-center gap-2">
+                <CalendarDays className="w-4 h-4 text-primary" />
+                <span>¿Qué deseas agendar?</span>
+              </h3>
+              <button 
+                onClick={() => setIsSelectorModalOpen(false)}
+                className="text-on-surface-variant hover:text-on-surface p-1 rounded-lg transition-colors cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="text-xs text-on-surface-variant bg-surface-container-low p-3 rounded-xl border border-outline-variant/10 space-y-1">
+              <p className="font-semibold text-on-surface">Horario seleccionado:</p>
+              <p className="font-mono text-[11px] text-primary">
+                {selectedDate.toLocaleDateString('es-CL', { weekday: 'long', day: 'numeric', month: 'long' })}
+              </p>
+              <p className="font-mono text-[11px] text-primary font-bold">
+                {selectedSlotStart} — {selectedSlotEnd} hrs
+              </p>
+            </div>
+
+            <div className="flex flex-col gap-3 pt-2">
+              <button
+                onClick={() => {
+                  setSessionDefaultDate(selectedDate.toISOString().split('T')[0]);
+                  setSessionDefaultTime(selectedSlotStart);
+                  setIsSelectorModalOpen(false);
+                  setIsNewSessionOpen(true);
+                }}
+                className="flex items-center justify-center gap-2 w-full py-3 bg-primary text-on-primary hover:bg-primary-container text-xs font-bold rounded-xl transition-all cursor-pointer shadow-sm active:scale-95"
+              >
+                <Plus className="w-4 h-4" />
+                <span>Agendar Cita Clínica</span>
+              </button>
+
+              <button
+                onClick={() => {
+                  setEventDate(selectedDate.toISOString().split('T')[0]);
+                  setEventStartTime(selectedSlotStart);
+                  setEventEndTime(selectedSlotEnd);
+                  setEventTitle('');
+                  setEventDescription('');
+                  setIsSelectorModalOpen(false);
+                  setIsNewEventOpen(true);
+                }}
+                className="flex items-center justify-center gap-2 w-full py-3 bg-secondary-container text-on-secondary-container hover:bg-surface-container-high border border-outline-variant/30 text-xs font-bold rounded-xl transition-all cursor-pointer shadow-sm active:scale-95"
+              >
+                <Briefcase className="w-4 h-4" />
+                <span>Agendar Evento Personal</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* MODAL: NUEVA ACTIVIDAD / EVENTO PERSONAL */}
       {isNewEventOpen && (

@@ -6,9 +6,11 @@ interface NewSessionModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSuccess: () => void;
+  defaultDate?: string;
+  defaultTime?: string;
 }
 
-export const NewSessionModal: React.FC<NewSessionModalProps> = ({ isOpen, onClose, onSuccess }) => {
+export const NewSessionModal: React.FC<NewSessionModalProps> = ({ isOpen, onClose, onSuccess, defaultDate, defaultTime }) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [patients, setPatients] = useState<{ id: string; full_name: string }[]>([]);
@@ -34,15 +36,15 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({ isOpen, onClos
 
       setFormData({
         patient_id: '',
-        date_session: `${yy}-${mm}-${dd}`,
-        time_session: timeStr,
+        date_session: defaultDate || `${yy}-${mm}-${dd}`,
+        time_session: defaultTime || timeStr,
         modality: 'Online',
         value_session: 40000,
         comentarios_internos: ''
       });
       fetchPatientsAndProfile();
     }
-  }, [isOpen]);
+  }, [isOpen, defaultDate, defaultTime]);
 
   const fetchPatientsAndProfile = async () => {
     setError('');
