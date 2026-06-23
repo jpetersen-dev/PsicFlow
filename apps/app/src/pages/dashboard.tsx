@@ -8,12 +8,12 @@
 import React, { useState, useEffect } from 'react';
 import Head from 'next/head';
 import Link from 'next/link';
-import { 
-  Users, 
-  Calendar, 
-  Clock, 
-  DollarSign, 
-  Plus, 
+import {
+  Users,
+  Calendar,
+  Clock,
+  DollarSign,
+  Plus,
   AlertTriangle,
   Lightbulb,
   ArrowUpRight,
@@ -78,7 +78,7 @@ export default function Dashboard() {
         .from('patients')
         .select('*', { count: 'exact', head: true })
         .eq('status', 'activo');
-      
+
       // 2. Fetch today's sessions
       const { data: todaySessions } = await supabase
         .from('sessions')
@@ -236,7 +236,7 @@ export default function Dashboard() {
     setQuickNotes(content);
     const tenantId = localStorage.getItem('active-tenant-id');
     if (!profile?.id || !tenantId) return;
-    
+
     try {
       setSavingNotes(true);
       if (noteId) {
@@ -288,7 +288,7 @@ export default function Dashboard() {
   return (
     <>
       <Head>
-        <title>MindCare Portal - Dashboard Clínico</title>
+        <title>PsicFlow Portal - Dashboard Clínico</title>
         <meta name="description" content="Dashboard terapéutico adaptado con diseño minimalista." />
       </Head>
 
@@ -304,14 +304,14 @@ export default function Dashboard() {
             </p>
           </div>
           <div className="flex flex-wrap gap-3 self-start md:self-auto">
-            <button 
+            <button
               onClick={() => setIsNewPatientOpen(true)}
               className="bg-primary text-on-primary px-6 py-3 rounded-lg font-label-md flex items-center gap-2 shadow-sm hover:bg-primary-container active:scale-95 transition-all cursor-pointer"
             >
               <Plus className="w-5 h-5" />
               <span>Ingresar Paciente</span>
             </button>
-            <button 
+            <button
               onClick={() => setIsNewSessionOpen(true)}
               className="bg-secondary-container text-on-secondary-container px-6 py-3 rounded-lg font-label-md flex items-center gap-2 shadow-sm hover:bg-bg-card active:scale-95 transition-all cursor-pointer border border-border-color"
             >
@@ -423,7 +423,7 @@ export default function Dashboard() {
                         const patientInfo = Array.isArray(sess.patient) ? sess.patient[0] : sess.patient;
                         const pName = patientInfo?.full_name || 'Paciente Sin Nombre';
                         const pInitials = getInitials(pName);
-                        
+
                         return (
                           <tr key={sess.id} className="hover:bg-surface-container-low/30 transition-colors">
                             <td className="px-6 py-4">
@@ -439,16 +439,15 @@ export default function Dashboard() {
                               <div className="text-xs text-outline">{sess.time_session.slice(0, 5)} hrs</div>
                             </td>
                             <td className="px-6 py-4">
-                              <span className={`px-3 py-1 rounded-full text-[12px] font-semibold ${
-                                sess.modality === 'Online'
+                              <span className={`px-3 py-1 rounded-full text-[12px] font-semibold ${sess.modality === 'Online'
                                   ? 'bg-secondary-container/40 text-on-secondary-container'
                                   : 'bg-primary-fixed/40 text-on-primary-fixed-variant'
-                              }`}>
+                                }`}>
                                 {sess.modality}
                               </span>
                             </td>
                             <td className="px-6 py-4">
-                              <Link 
+                              <Link
                                 href={`/sesiones/${sess.id}`}
                                 className="text-primary hover:text-primary-container transition-colors font-bold text-sm"
                               >
@@ -480,27 +479,25 @@ export default function Dashboard() {
                   Lunes - Viernes
                 </div>
               </div>
-              
+
               <div className="flex items-end justify-between gap-3 h-40 pt-4 px-2">
                 {weeklyTrend.map((t, idx) => {
                   const pct = Math.max((t.count / maxWeeklyCount) * 100, 8); // Minimum height of 8% for visibility
                   const isToday = new Date().getDay() === (idx + 1); // 1 = Mon, 2 = Tue, etc.
-                  
+
                   return (
                     <div key={t.day} className="flex-1 flex flex-col items-center group cursor-pointer">
                       <div className="w-full bg-surface-container h-32 rounded-t-lg relative overflow-hidden group">
-                        <div 
+                        <div
                           style={{ height: `${pct}%` }}
-                          className={`absolute bottom-0 w-full rounded-t-md transition-all duration-500 ${
-                            isToday 
-                              ? 'bg-primary' 
+                          className={`absolute bottom-0 w-full rounded-t-md transition-all duration-500 ${isToday
+                              ? 'bg-primary'
                               : 'bg-primary/40 group-hover:bg-primary/80'
-                          }`}
+                            }`}
                         ></div>
                       </div>
-                      <span className={`font-label-sm text-label-sm mt-2 whitespace-nowrap scale-90 ${
-                        isToday ? 'text-primary font-bold' : 'text-on-surface-variant'
-                      }`}>
+                      <span className={`font-label-sm text-label-sm mt-2 whitespace-nowrap scale-90 ${isToday ? 'text-primary font-bold' : 'text-on-surface-variant'
+                        }`}>
                         {t.day.slice(0, 3)}
                       </span>
                     </div>
@@ -607,10 +604,10 @@ export default function Dashboard() {
       </div>
 
       {/* Modal para Crear Paciente */}
-      <NewPatientModal 
-        isOpen={isNewPatientOpen} 
-        onClose={() => setIsNewPatientOpen(false)} 
-        onSuccess={fetchDashboardData} 
+      <NewPatientModal
+        isOpen={isNewPatientOpen}
+        onClose={() => setIsNewPatientOpen(false)}
+        onSuccess={fetchDashboardData}
       />
 
       {/* Modal para Agendar Sesión */}

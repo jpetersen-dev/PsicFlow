@@ -1,12 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import Head from 'next/head';
 import Link from 'next/link';
-import { 
-  Users, 
-  Search, 
-  Filter, 
-  Download, 
-  Plus, 
+import {
+  Users,
+  Search,
+  Filter,
+  Download,
+  Plus,
   Eye,
   ArrowUpDown,
   ChevronLeft,
@@ -61,11 +61,11 @@ export default function Pacientes() {
 
       if (!error && data) {
         setPatients(data);
-        
+
         // Exclude 'prospecto' from clinical stats
         const clinicalPatients = data.filter(p => p.status !== 'prospecto');
         setTotalCount(clinicalPatients.length);
-        
+
         // Compute active patients
         const active = clinicalPatients.filter(p => p.status === 'activo').length;
         setActiveCount(active);
@@ -89,7 +89,7 @@ export default function Pacientes() {
         // Compute Patient Continuity Rate: Active patients who have at least one upcoming session
         const activePatients = clinicalPatients.filter(p => p.status === 'activo');
         if (activePatients.length > 0) {
-          const withUpcoming = activePatients.filter(p => 
+          const withUpcoming = activePatients.filter(p =>
             p.sessions?.some((s: any) => s.date_session >= todayStr && s.status_session === 'Programada')
           ).length;
           setContinuityRate(Math.round((withUpcoming / activePatients.length) * 100));
@@ -128,7 +128,7 @@ export default function Pacientes() {
     if (search.trim()) {
       const query = search.toLowerCase();
       result = result.filter(
-        p => 
+        p =>
           (p.full_name && p.full_name.toLowerCase().includes(query)) ||
           (p.rut_patient && p.rut_patient.toLowerCase().includes(query)) ||
           (p.ficha_id_num && p.ficha_id_num.toLowerCase().includes(query))
@@ -161,26 +161,26 @@ export default function Pacientes() {
     if (clean.length < 8 || clean.length > 9) return false;
     const body = clean.slice(0, -1);
     const dv = clean.slice(-1).toUpperCase();
-    
+
     let sum = 0;
     let multiplier = 2;
     for (let i = body.length - 1; i >= 0; i--) {
       sum += parseInt(body[i]) * multiplier;
       multiplier = multiplier === 7 ? 2 : multiplier + 1;
     }
-    
+
     const expectedDv = 11 - (sum % 11);
     let expectedDvStr = '';
     if (expectedDv === 11) expectedDvStr = '0';
     else if (expectedDv === 10) expectedDvStr = 'K';
     else expectedDvStr = String(expectedDv);
-    
+
     return expectedDvStr === dv;
   };
 
   const handleExportExcel = () => {
     if (filteredPatients.length === 0) return;
-    
+
     const data = filteredPatients.map(p => ({
       'ID Ficha': p.ficha_id_num,
       'RUT': p.rut_patient || 'N/A',
@@ -210,7 +210,7 @@ export default function Pacientes() {
       try {
         const data = evt.target?.result;
         if (!data) throw new Error('No se pudo leer el archivo.');
-        
+
         const workbook = XLSX.read(data, { type: 'binary' });
         const sheetName = workbook.SheetNames[0];
         const sheet = workbook.Sheets[sheetName];
@@ -326,7 +326,7 @@ export default function Pacientes() {
       return { last: 'N/A', next: 'No agendada' };
     }
     const todayStr = new Date().toISOString().split('T')[0];
-    
+
     // Sort sessions by date
     const past = patientSessions
       .filter((s: any) => s.date_session < todayStr)
@@ -363,7 +363,7 @@ export default function Pacientes() {
   return (
     <>
       <Head>
-        <title>MindCare Portal - Gestión de Pacientes</title>
+        <title>PsicFlow Portal - Gestión de Pacientes</title>
       </Head>
 
       <div className="space-y-stack-lg">
@@ -375,7 +375,7 @@ export default function Pacientes() {
               Administra las fichas clínicas e historial clínico en un entorno regulado y de baja carga cognitiva.
             </p>
           </div>
-          <button 
+          <button
             onClick={() => setIsNewPatientOpen(true)}
             className="flex items-center justify-center gap-2 bg-primary text-on-primary px-6 py-3 rounded-lg font-label-md text-label-md hover:bg-primary-container transition-all shadow-sm cursor-pointer self-start md:self-auto"
           >
@@ -430,11 +430,10 @@ export default function Pacientes() {
               setCrmTab('pacientes');
               setStatusFilter('all');
             }}
-            className={`pb-3 font-semibold text-sm transition-all border-b-2 ${
-              crmTab === 'pacientes'
+            className={`pb-3 font-semibold text-sm transition-all border-b-2 ${crmTab === 'pacientes'
                 ? 'border-primary text-primary'
                 : 'border-transparent text-on-surface-variant hover:text-on-surface'
-            }`}
+              }`}
           >
             Pacientes Clínicos ({patients.filter(p => p.status !== 'prospecto').length})
           </button>
@@ -443,11 +442,10 @@ export default function Pacientes() {
               setCrmTab('prospectos');
               setStatusFilter('all');
             }}
-            className={`pb-3 font-semibold text-sm transition-all border-b-2 ${
-              crmTab === 'prospectos'
+            className={`pb-3 font-semibold text-sm transition-all border-b-2 ${crmTab === 'prospectos'
                 ? 'border-primary text-primary'
                 : 'border-transparent text-on-surface-variant hover:text-on-surface'
-            }`}
+              }`}
           >
             Prospectos (CRM) ({prospectsCount})
           </button>
@@ -460,8 +458,8 @@ export default function Pacientes() {
             {/* Search inputs */}
             <div className="relative w-full md:max-w-md">
               <Search className="w-4 h-4 text-on-surface-variant absolute left-3 top-1/2 -translate-y-1/2" />
-              <input 
-                type="text" 
+              <input
+                type="text"
                 placeholder="Buscar por Nombre, RUT o Ficha ID..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
@@ -475,7 +473,7 @@ export default function Pacientes() {
               {crmTab === 'pacientes' && (
                 <div className="flex items-center gap-1.5">
                   <Filter className="w-4 h-4 text-on-surface-variant" />
-                  <select 
+                  <select
                     value={statusFilter}
                     onChange={(e) => setStatusFilter(e.target.value)}
                     className="bg-surface-container-low/60 border border-outline-variant/20 rounded-lg px-3 py-1.5 text-xs text-on-surface-variant focus:outline-none"
@@ -493,7 +491,7 @@ export default function Pacientes() {
               {/* Sort order */}
               <div className="flex items-center gap-1.5">
                 <ArrowUpDown className="w-4 h-4 text-on-surface-variant" />
-                <select 
+                <select
                   value={sortOrder}
                   onChange={(e: any) => setSortOrder(e.target.value)}
                   className="bg-surface-container-low/60 border border-outline-variant/20 rounded-lg px-3 py-1.5 text-xs text-on-surface-variant focus:outline-none"
@@ -531,7 +529,7 @@ export default function Pacientes() {
                   <tbody className="divide-y divide-outline-variant/15 font-body-sm">
                     {currentItems.map((p) => {
                       const { last, next } = getSessionDates(p.sessions || []);
-                      
+
                       return (
                         <tr key={p.id} className="patient-table-row hover:bg-surface-container-low/30 transition-colors cursor-pointer" onClick={() => window.location.href = `/pacientes/${p.id}`}>
                           <td className="px-gutter py-4">
@@ -561,7 +559,7 @@ export default function Pacientes() {
                             <p className="text-[11px] text-on-secondary-container font-mono">{next.split(' ')[1] || ''}</p>
                           </td>
                           <td className="px-gutter py-4 text-right" onClick={(e) => e.stopPropagation()}>
-                            <Link 
+                            <Link
                               href={`/pacientes/${p.id}`}
                               className="inline-flex items-center gap-1.5 text-xs text-primary bg-primary/5 border border-primary/20 hover:bg-primary hover:text-white px-3.5 py-2 rounded-lg font-bold transition-all"
                             >
@@ -578,7 +576,7 @@ export default function Pacientes() {
 
               {/* Table Pagination */}
               <div className="px-gutter py-4 border-t border-outline-variant/20 flex items-center justify-between bg-surface-container-low/10">
-                <button 
+                <button
                   onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
                   disabled={currentPage === 1}
                   className="flex items-center gap-1 font-label-md text-label-md text-primary hover:text-primary-container disabled:text-outline-variant disabled:cursor-not-allowed transition-colors"
@@ -588,20 +586,19 @@ export default function Pacientes() {
                 </button>
                 <div className="flex gap-2">
                   {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => (
-                    <button 
+                    <button
                       key={page}
                       onClick={() => setCurrentPage(page)}
-                      className={`w-8 h-8 flex items-center justify-center rounded-lg font-label-md text-sm transition-all ${
-                        currentPage === page
+                      className={`w-8 h-8 flex items-center justify-center rounded-lg font-label-md text-sm transition-all ${currentPage === page
                           ? 'bg-primary text-on-primary font-bold shadow-sm'
                           : 'hover:bg-surface-container-low text-on-surface-variant'
-                      }`}
+                        }`}
                     >
                       {page}
                     </button>
                   ))}
                 </div>
-                <button 
+                <button
                   onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
                   disabled={currentPage === totalPages}
                   className="flex items-center gap-1 font-label-md text-label-md text-primary hover:text-primary-container disabled:text-outline-variant disabled:cursor-not-allowed transition-colors"
@@ -636,7 +633,7 @@ export default function Pacientes() {
               </p>
             </div>
             <div className="mt-4 space-y-2">
-              <button 
+              <button
                 onClick={handleExportExcel}
                 disabled={filteredPatients.length === 0}
                 className="w-full flex items-center justify-center gap-2 bg-secondary text-white py-2.5 rounded-lg font-label-md hover:bg-secondary/90 transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed text-xs font-semibold"
@@ -648,11 +645,11 @@ export default function Pacientes() {
               <label className="w-full flex items-center justify-center gap-2 border border-secondary text-secondary py-2.5 rounded-lg font-label-md hover:bg-secondary/5 transition-all cursor-pointer text-xs font-semibold text-center">
                 <FileSpreadsheet className="w-4 h-4" />
                 <span>Importar de Excel (.xlsx)</span>
-                <input 
-                  type="file" 
-                  accept=".xlsx" 
-                  onChange={handleImportExcel} 
-                  className="hidden" 
+                <input
+                  type="file"
+                  accept=".xlsx"
+                  onChange={handleImportExcel}
+                  className="hidden"
                 />
               </label>
             </div>
@@ -661,10 +658,10 @@ export default function Pacientes() {
       </div>
 
       {/* New Patient Modal */}
-      <NewPatientModal 
-        isOpen={isNewPatientOpen} 
-        onClose={() => setIsNewPatientOpen(false)} 
-        onSuccess={fetchPatients} 
+      <NewPatientModal
+        isOpen={isNewPatientOpen}
+        onClose={() => setIsNewPatientOpen(false)}
+        onSuccess={fetchPatients}
       />
     </>
   );

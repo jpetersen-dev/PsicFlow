@@ -8,17 +8,17 @@
 import React, { useState, useEffect, useRef } from 'react';
 import Head from 'next/head';
 import Link from 'next/link';
-import { 
-  Calendar as CalendarIcon, 
-  ChevronLeft, 
-  ChevronRight, 
-  Clock, 
-  Plus, 
-  Edit3, 
-  CheckCircle2, 
-  Circle, 
-  Paperclip, 
-  Send, 
+import {
+  Calendar as CalendarIcon,
+  ChevronLeft,
+  ChevronRight,
+  Clock,
+  Plus,
+  Edit3,
+  CheckCircle2,
+  Circle,
+  Paperclip,
+  Send,
   Lightbulb,
   X,
   Trash2,
@@ -38,12 +38,12 @@ import { NewSessionModal } from '../components/NewSessionModal';
 
 export default function Calendario() {
   const { maskName } = usePrivacyMode();
-  
+
   // Navigation & View States
   const [currentDate, setCurrentDate] = useState(new Date(2026, 5, 16)); // Initialize at June 2026 (matching system metadata)
   const [selectedDate, setSelectedDate] = useState<Date>(new Date(2026, 5, 16));
   const [calendarView, setCalendarView] = useState<'month' | 'week' | 'day'>('month');
-  
+
   // Data States
   const [sessions, setSessions] = useState<any[]>([]);
   const [showPending, setShowPending] = useState(false);
@@ -53,7 +53,7 @@ export default function Calendario() {
   const [reminders, setReminders] = useState<{ id: string; text: string; completed: boolean; due?: string }[]>([]);
   const [quickNotes, setQuickNotes] = useState('');
   const [noteId, setNoteId] = useState<string | null>(null);
-  
+
   // Loading & Modal States
   const [loading, setLoading] = useState(true);
   const [isNewSessionOpen, setIsNewSessionOpen] = useState(false);
@@ -68,7 +68,7 @@ export default function Calendario() {
   const [eventDate, setEventDate] = useState('');
   const [eventStartTime, setEventStartTime] = useState('09:00');
   const [eventEndTime, setEventEndTime] = useState('10:00');
-  
+
   // Form State for Task
   const [newReminderText, setNewReminderText] = useState('');
 
@@ -79,12 +79,12 @@ export default function Calendario() {
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [deletingType, setDeletingType] = useState<'session' | 'personal' | null>(null);
   const [editingEventId, setEditingEventId] = useState<string | null>(null);
-  
+
   // FreeBusy / Availability states
   const [availabilityTimeline, setAvailabilityTimeline] = useState<any[]>([]);
   const [availabilityLoading, setAvailabilityLoading] = useState(false);
   const [googleConnected, setGoogleConnected] = useState(false);
-  const [availabilityCache, setAvailabilityCache] = useState<Record<string, any>>({}); 
+  const [availabilityCache, setAvailabilityCache] = useState<Record<string, any>>({});
 
   // For prefilled values when agendamiento occurs via slot click
   const [sessionDefaultDate, setSessionDefaultDate] = useState('');
@@ -269,11 +269,11 @@ export default function Calendario() {
       try {
         const activeTenant = localStorage.getItem('active-tenant-id');
         const { data: { session } } = await supabase.auth.getSession();
-        
+
         if (activeTenant) {
           setTenantId(activeTenant);
         }
-        
+
         if (session?.user?.id && activeTenant) {
           const { data: profData } = await supabase
             .from('profiles')
@@ -282,7 +282,7 @@ export default function Calendario() {
             .eq('organization_id', activeTenant)
             .limit(1)
             .single();
-            
+
           if (profData) {
             setProfileId(profData.id);
             fetchTasks(profData.id);
@@ -293,7 +293,7 @@ export default function Calendario() {
         console.error('Error loading user context:', err);
       }
     };
-    
+
     loadUserContext();
   }, []);
 
@@ -310,7 +310,7 @@ export default function Calendario() {
   // FreeBusy: Fetch availability when selectedDate changes
   const fetchAvailability = async (date: Date) => {
     const dateStr = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
-    
+
     // Check cache first
     if (availabilityCache[dateStr]) {
       const cached = availabilityCache[dateStr];
@@ -323,7 +323,7 @@ export default function Calendario() {
     try {
       const { data: { session } } = await supabase.auth.getSession();
       const tenantId = localStorage.getItem('active-tenant-id');
-      
+
       const res = await fetch('/api/google/freebusy', {
         method: 'POST',
         headers: {
@@ -369,7 +369,7 @@ export default function Calendario() {
         })
         .select()
         .single();
-      
+
       if (error) throw error;
       if (data) {
         setReminders(prev => [...prev, {
@@ -575,7 +575,7 @@ export default function Calendario() {
   const month = currentDate.getMonth(); // 0-indexed
 
   const monthNames = [
-    'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 
+    'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
     'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'
   ];
 
@@ -621,7 +621,7 @@ export default function Calendario() {
     const firstDayIndex = new Date(year, month, 1).getDay(); // Weekday of 1st day (0 = Sun, 1 = Mon)
     const totalDays = new Date(year, month + 1, 0).getDate(); // Total days in current month
     const prevMonthTotalDays = new Date(year, month, 0).getDate(); // Total days in previous month
-    
+
     const cells = [];
 
     // 1. Padding from previous month
@@ -665,7 +665,7 @@ export default function Calendario() {
     const currentDay = date.getDay(); // 0 (Sun) - 6 (Sat)
     const sunday = new Date(date);
     sunday.setDate(date.getDate() - currentDay);
-    
+
     const days = [];
     for (let i = 0; i < 7; i++) {
       const day = new Date(sunday);
@@ -714,26 +714,26 @@ export default function Calendario() {
   return (
     <>
       <Head>
-        <title>MindCare Portal - Calendario Clínico</title>
+        <title>PsicFlow Portal - Calendario Clínico</title>
       </Head>
 
       <main className="flex flex-col lg:flex-row min-h-[calc(100vh-8rem)] gap-gutter -m-gutter bg-surface">
         {/* Left Side: Calendar View Grid */}
         <div className="flex-1 p-gutter overflow-y-auto space-y-6">
-          
+
           {/* Header & Navigation Controls */}
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
             <div>
               <h3 className="font-headline-md text-headline-md text-on-surface font-bold capitalize">
-                {calendarView === 'day' 
-                  ? formatDateString(selectedDate) 
+                {calendarView === 'day'
+                  ? formatDateString(selectedDate)
                   : `${monthNames[month]} ${year}`}
               </h3>
               <p className="font-body-sm text-body-sm text-on-surface-variant">
                 Calendario clínico y personal integrado.
               </p>
             </div>
-            
+
             <div className="flex flex-wrap items-center gap-4">
               {/* Toggle Reservas Pendientes */}
               <label className="flex items-center gap-2 text-xs font-semibold text-on-surface-variant cursor-pointer bg-surface-container-low border border-outline-variant/20 rounded-xl px-3 py-2">
@@ -757,11 +757,10 @@ export default function Calendario() {
                         setSelectedDate(currentDate);
                       }
                     }}
-                    className={`px-3 py-1.5 rounded-lg capitalize transition-all cursor-pointer ${
-                      calendarView === view 
-                        ? 'bg-primary text-on-primary shadow-sm' 
+                    className={`px-3 py-1.5 rounded-lg capitalize transition-all cursor-pointer ${calendarView === view
+                        ? 'bg-primary text-on-primary shadow-sm'
                         : 'text-on-surface-variant hover:bg-surface-container-lowest'
-                    }`}
+                      }`}
                   >
                     {view === 'month' ? 'Mes' : view === 'week' ? 'Semana' : 'Día'}
                   </button>
@@ -770,10 +769,10 @@ export default function Calendario() {
 
               {/* Navigation */}
               <div className="flex items-center gap-2 bg-surface-container-low p-1 rounded-xl">
-                <button 
+                <button
                   onClick={
-                    calendarView === 'month' ? prevMonth : 
-                    calendarView === 'week' ? prevWeek : prevDay
+                    calendarView === 'month' ? prevMonth :
+                      calendarView === 'week' ? prevWeek : prevDay
                   }
                   className="p-1.5 hover:bg-surface-container-lowest rounded-lg text-on-surface-variant hover:text-primary transition-all cursor-pointer"
                 >
@@ -789,10 +788,10 @@ export default function Calendario() {
                 >
                   Hoy
                 </button>
-                <button 
+                <button
                   onClick={
-                    calendarView === 'month' ? nextMonth : 
-                    calendarView === 'week' ? nextWeek : nextDay
+                    calendarView === 'month' ? nextMonth :
+                      calendarView === 'week' ? nextWeek : nextDay
                   }
                   className="p-1.5 hover:bg-surface-container-lowest rounded-lg text-on-surface-variant hover:text-primary transition-all cursor-pointer"
                 >
@@ -827,24 +826,22 @@ export default function Calendario() {
                       const isToday = new Date().toISOString().split('T')[0] === cell.dateString;
 
                       return (
-                        <div 
+                        <div
                           key={`${cell.dateString}-${idx}`}
                           onClick={() => {
                             setSelectedDate(new Date(cell.dateString + 'T12:00:00'));
                             setCalendarView('day');
                           }}
-                          className={`min-h-[120px] p-2 flex flex-col justify-between transition-colors cursor-pointer hover:bg-surface-container-lowest/80 ${
-                            cell.isCurrentMonth 
-                              ? 'bg-surface-container-lowest text-on-surface' 
+                          className={`min-h-[120px] p-2 flex flex-col justify-between transition-colors cursor-pointer hover:bg-surface-container-lowest/80 ${cell.isCurrentMonth
+                              ? 'bg-surface-container-lowest text-on-surface'
                               : 'bg-surface-container-low/20 text-outline-variant'
-                          } ${isToday ? 'ring-2 ring-inset ring-primary/45 bg-primary/5' : ''}`}
+                            } ${isToday ? 'ring-2 ring-inset ring-primary/45 bg-primary/5' : ''}`}
                         >
                           <div className="flex justify-between items-center mb-1">
-                            <span className={`text-xs font-semibold px-1.5 py-0.5 rounded-full ${
-                              isToday 
-                                ? 'bg-primary text-on-primary font-bold' 
+                            <span className={`text-xs font-semibold px-1.5 py-0.5 rounded-full ${isToday
+                                ? 'bg-primary text-on-primary font-bold'
                                 : cell.isCurrentMonth ? 'text-on-surface' : 'text-outline-variant/60'
-                            }`}>
+                              }`}>
                               {cell.dayNum.toString().padStart(2, '0')}
                             </span>
                             {(daySessions.length + dayEvents.length) > 0 && (
@@ -859,7 +856,7 @@ export default function Calendario() {
                             {daySessions.map((sess) => {
                               const patName = sess.patient?.full_name || 'Paciente';
                               return (
-                                <div 
+                                <div
                                   key={sess.id}
                                   onClick={(e) => {
                                     e.stopPropagation();
@@ -873,7 +870,7 @@ export default function Calendario() {
                                 </div>
                               );
                             })}
-                            
+
                             {/* Render Personal Events */}
                             {dayEvents.map((evt) => (
                               <div
@@ -908,17 +905,16 @@ export default function Calendario() {
                     const dayName = day.toLocaleDateString('es-CL', { weekday: 'short' });
 
                     return (
-                      <div 
+                      <div
                         key={idx}
                         onClick={() => {
                           setSelectedDate(day);
                           setCalendarView('day');
                         }}
-                        className={`bg-surface-container-lowest p-4 rounded-2xl shadow-sm border flex flex-col min-h-[350px] transition-all cursor-pointer hover:border-primary/30 ${
-                          isToday 
-                            ? 'ring-2 ring-primary/40 border-primary/40 bg-primary/5' 
+                        className={`bg-surface-container-lowest p-4 rounded-2xl shadow-sm border flex flex-col min-h-[350px] transition-all cursor-pointer hover:border-primary/30 ${isToday
+                            ? 'ring-2 ring-primary/40 border-primary/40 bg-primary/5'
                             : 'border-outline-variant/20'
-                        }`}
+                          }`}
                       >
                         <div className="border-b border-outline-variant/15 pb-2 mb-3 flex justify-between items-center">
                           <div>
@@ -938,7 +934,7 @@ export default function Calendario() {
                           ) : (
                             <>
                               {daySessions.map(sess => (
-                                <div 
+                                <div
                                   key={sess.id}
                                   onClick={(e) => {
                                     e.stopPropagation();
@@ -956,7 +952,7 @@ export default function Calendario() {
                               ))}
 
                               {dayEvents.map(evt => (
-                                <div 
+                                <div
                                   key={evt.id}
                                   onClick={(e) => {
                                     e.stopPropagation();
@@ -999,7 +995,7 @@ export default function Calendario() {
                     const selDateStr = selectedDate.toISOString().split('T')[0];
                     const daySessions = visibleSessions.filter(s => s.date_session === selDateStr);
                     const dayEvents = personalEvents.filter(e => e.event_date === selDateStr);
-                    
+
                     const sortedTimeline = [
                       ...daySessions.map(s => ({ type: 'session', time: s.time_session, data: s })),
                       ...dayEvents.map(e => ({ type: 'event', time: e.start_time, data: e }))
@@ -1025,17 +1021,16 @@ export default function Calendario() {
                               <div key={`timeline-sess-${sess.id}-${idx}`} className="relative">
                                 {/* Timeline Bullet */}
                                 <span className="absolute -left-[31px] top-1.5 w-4.5 h-4.5 rounded-full border-4 border-surface bg-primary shadow-sm flex items-center justify-center"></span>
-                                
-                                <div 
+
+                                <div
                                   onClick={() => {
                                     setSelectedEventData({ type: 'session', data: sess });
                                     setIsEventDetailOpen(true);
                                   }}
-                                  className={`bg-surface-container-low p-4 rounded-xl border transition-all flex flex-col sm:flex-row justify-between sm:items-center gap-4 cursor-pointer ${
-                                    sess.status_payment === 'Pendiente' 
-                                      ? 'border-outline-variant/25 border-dashed bg-surface-variant/20 opacity-75 hover:bg-surface-variant/30' 
+                                  className={`bg-surface-container-low p-4 rounded-xl border transition-all flex flex-col sm:flex-row justify-between sm:items-center gap-4 cursor-pointer ${sess.status_payment === 'Pendiente'
+                                      ? 'border-outline-variant/25 border-dashed bg-surface-variant/20 opacity-75 hover:bg-surface-variant/30'
                                       : 'border-outline-variant/15 hover:border-primary/30 shadow-sm hover:bg-surface-container'
-                                  }`}
+                                    }`}
                                 >
                                   <div className="space-y-1.5">
                                     <div className="flex items-center gap-2.5">
@@ -1043,10 +1038,9 @@ export default function Calendario() {
                                         <Clock className="w-3.5 h-3.5" />
                                         <span>{sess.time_session.slice(0, 5)} hrs</span>
                                       </span>
-                                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                                        sess.status_session === 'Completa' ? 'bg-success/10 text-success' :
-                                        sess.status_session === 'Programada' ? 'bg-primary/10 text-primary' : 'bg-outline-variant/10 text-on-surface-variant'
-                                      }`}>
+                                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${sess.status_session === 'Completa' ? 'bg-success/10 text-success' :
+                                          sess.status_session === 'Programada' ? 'bg-primary/10 text-primary' : 'bg-outline-variant/10 text-on-surface-variant'
+                                        }`}>
                                         Cita {sess.status_session}
                                       </span>
                                       <span className="text-[10px] bg-secondary-container/45 text-on-secondary-container px-2 py-0.5 rounded-md font-medium">
@@ -1055,8 +1049,8 @@ export default function Calendario() {
                                     </div>
                                     <p className="text-sm font-bold text-on-surface">{maskName(patName)}</p>
                                   </div>
-                                  
-                                  <button 
+
+                                  <button
                                     onClick={(e) => {
                                       e.stopPropagation();
                                       setSelectedEventData({ type: 'session', data: sess });
@@ -1077,7 +1071,7 @@ export default function Calendario() {
                                 {/* Timeline Bullet */}
                                 <span className="absolute -left-[31px] top-1.5 w-4.5 h-4.5 rounded-full border-4 border-surface bg-purple-500 shadow-sm"></span>
 
-                                <div 
+                                <div
                                   onClick={() => {
                                     setSelectedEventData({ type: 'personal', data: evt });
                                     setIsEventDetailOpen(true);
@@ -1149,7 +1143,7 @@ export default function Calendario() {
 
         {/* Right Side: Reminders & Notes Panel */}
         <aside className="w-full lg:w-[320px] bg-surface-container-low border-l border-outline-variant/20 p-6 flex flex-col gap-6 overflow-y-auto shrink-0">
-          
+
           {/* Availability Section */}
           <section className="space-y-3">
             <div className="flex items-center justify-between border-b border-outline-variant/20 pb-2">
@@ -1173,35 +1167,31 @@ export default function Calendario() {
                   const isAvailable = block.type === 'available';
                   const isGoogle = block.source === 'google';
                   const isPsicFlow = block.source === 'psicflow';
-                  
+
                   return (
-                    <div 
+                    <div
                       key={idx}
-                      className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs transition-colors ${
-                        isAvailable 
-                          ? 'bg-green-50 border border-green-200/60' 
+                      className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs transition-colors ${isAvailable
+                          ? 'bg-green-50 border border-green-200/60'
                           : isGoogle
                             ? 'bg-orange-50 border border-orange-200/60'
                             : 'bg-blue-50 border border-blue-200/60'
-                      }`}
+                        }`}
                     >
                       {/* Time */}
-                      <span className={`font-mono font-semibold shrink-0 ${
-                        isAvailable ? 'text-green-700' : isGoogle ? 'text-orange-700' : 'text-blue-700'
-                      }`}>
+                      <span className={`font-mono font-semibold shrink-0 ${isAvailable ? 'text-green-700' : isGoogle ? 'text-orange-700' : 'text-blue-700'
+                        }`}>
                         {block.start}
                       </span>
                       <span className="text-on-surface-variant">—</span>
-                      <span className={`font-mono font-semibold shrink-0 ${
-                        isAvailable ? 'text-green-700' : isGoogle ? 'text-orange-700' : 'text-blue-700'
-                      }`}>
+                      <span className={`font-mono font-semibold shrink-0 ${isAvailable ? 'text-green-700' : isGoogle ? 'text-orange-700' : 'text-blue-700'
+                        }`}>
                         {block.end}
                       </span>
-                      
+
                       {/* Label */}
-                      <span className={`truncate ${
-                        isAvailable ? 'text-green-600' : isGoogle ? 'text-orange-600' : 'text-blue-600'
-                      }`}>
+                      <span className={`truncate ${isAvailable ? 'text-green-600' : isGoogle ? 'text-orange-600' : 'text-blue-600'
+                        }`}>
                         {isAvailable ? '✓ Disponible' : block.label}
                       </span>
 
@@ -1235,8 +1225,8 @@ export default function Calendario() {
 
             {/* Google Calendar connection hint */}
             {!googleConnected && (
-              <a 
-                href="/perfil" 
+              <a
+                href="/perfil"
                 className="flex items-center gap-2 px-3 py-2 bg-primary-container/15 border border-primary/10 rounded-lg text-[11px] text-primary hover:bg-primary-container/25 transition-colors group"
               >
                 <ExternalLink className="w-3.5 h-3.5 shrink-0" />
@@ -1271,14 +1261,14 @@ export default function Calendario() {
             </div>
 
             <form onSubmit={handleAddReminder} className="flex gap-2">
-              <input 
-                type="text" 
+              <input
+                type="text"
                 placeholder="Nueva tarea..."
                 value={newReminderText}
                 onChange={(e) => setNewReminderText(e.target.value)}
                 className="flex-1 bg-surface-container-lowest px-3 py-1.5 rounded-lg border border-outline-variant/30 text-xs focus:ring-1 focus:ring-primary focus:outline-none text-on-surface"
               />
-              <button 
+              <button
                 type="submit"
                 className="bg-primary text-on-primary p-1.5 rounded-lg hover:bg-primary-container cursor-pointer shrink-0"
               >
@@ -1288,12 +1278,11 @@ export default function Calendario() {
 
             <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
               {reminders.map((r) => (
-                <div 
-                  key={r.id} 
+                <div
+                  key={r.id}
                   onClick={() => handleToggleReminder(r.id)}
-                  className={`p-3 bg-surface-container-lowest rounded-xl shadow-sm border border-outline-variant/10 flex items-start justify-between gap-3 cursor-pointer hover:border-primary/20 transition-all group ${
-                    r.completed ? 'opacity-65' : ''
-                  }`}
+                  className={`p-3 bg-surface-container-lowest rounded-xl shadow-sm border border-outline-variant/10 flex items-start justify-between gap-3 cursor-pointer hover:border-primary/20 transition-all group ${r.completed ? 'opacity-65' : ''
+                    }`}
                 >
                   <div className="flex items-start gap-3 overflow-hidden">
                     <button className="shrink-0 mt-0.5 text-primary">
@@ -1329,21 +1318,21 @@ export default function Calendario() {
           <section className="space-y-4">
             <h4 className="font-headline-sm text-headline-sm text-on-surface font-bold border-b border-outline-variant/20 pb-2">Notas Rápidas</h4>
             <form onSubmit={handleSaveNotes} className="relative group">
-              <textarea 
+              <textarea
                 value={quickNotes}
                 onChange={(e) => setQuickNotes(e.target.value)}
-                className="w-full h-40 p-4 bg-surface-container-lowest border border-outline-variant/20 rounded-2xl font-body-sm text-body-sm focus:ring-2 focus:ring-primary/20 resize-none placeholder:text-on-surface-variant/40 shadow-sm focus:outline-none text-on-surface" 
+                className="w-full h-40 p-4 bg-surface-container-lowest border border-outline-variant/20 rounded-2xl font-body-sm text-body-sm focus:ring-2 focus:ring-primary/20 resize-none placeholder:text-on-surface-variant/40 shadow-sm focus:outline-none text-on-surface"
                 placeholder="Apunta algo rápido para recordar..."
               ></textarea>
               <div className="absolute bottom-3 right-3 flex gap-2">
-                <input 
-                  type="file" 
-                  ref={fileInputRef} 
-                  onChange={handleFileAttach} 
-                  className="hidden" 
+                <input
+                  type="file"
+                  ref={fileInputRef}
+                  onChange={handleFileAttach}
+                  className="hidden"
                 />
-                <button 
-                  type="button" 
+                <button
+                  type="button"
                   onClick={() => fileInputRef.current?.click()}
                   className="bg-surface-container-high hover:bg-surface-container-highest p-2 rounded-full transition-colors text-on-surface-variant cursor-pointer"
                   title="Adjuntar archivo"
@@ -1390,7 +1379,7 @@ export default function Calendario() {
                 <CalendarDays className="w-4 h-4 text-primary" />
                 <span>¿Qué deseas agendar?</span>
               </h3>
-              <button 
+              <button
                 onClick={() => setIsSelectorModalOpen(false)}
                 className="text-on-surface-variant hover:text-on-surface p-1 rounded-lg transition-colors cursor-pointer"
               >
@@ -1451,7 +1440,7 @@ export default function Calendario() {
                 <Briefcase className="w-5 h-5 text-primary" />
                 <span>Agendar Actividad o Evento</span>
               </h3>
-              <button 
+              <button
                 onClick={() => setIsNewEventOpen(false)}
                 className="text-on-surface-variant hover:text-on-surface p-1 rounded-lg transition-colors cursor-pointer"
               >
@@ -1462,8 +1451,8 @@ export default function Calendario() {
             <form onSubmit={handleCreatePersonalEvent} className="p-6 space-y-4">
               <div className="space-y-1">
                 <label className="text-xs font-bold text-on-surface-variant uppercase">Título del Evento *</label>
-                <input 
-                  type="text" 
+                <input
+                  type="text"
                   required
                   placeholder="Ej: Almuerzo de equipo, Supervisión clínica..."
                   value={eventTitle}
@@ -1475,7 +1464,7 @@ export default function Calendario() {
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1">
                   <label className="text-xs font-bold text-on-surface-variant uppercase">Tipo de Actividad</label>
-                  <select 
+                  <select
                     value={eventType}
                     onChange={(e) => setEventType(e.target.value)}
                     className="w-full bg-surface-container-low border border-outline-variant/20 px-3 py-2 rounded-xl text-sm focus:ring-1 focus:ring-primary focus:outline-none text-on-surface"
@@ -1489,8 +1478,8 @@ export default function Calendario() {
 
                 <div className="space-y-1">
                   <label className="text-xs font-bold text-on-surface-variant uppercase">Fecha *</label>
-                  <input 
-                    type="date" 
+                  <input
+                    type="date"
                     required
                     value={eventDate}
                     onChange={(e) => setEventDate(e.target.value)}
@@ -1502,8 +1491,8 @@ export default function Calendario() {
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1">
                   <label className="text-xs font-bold text-on-surface-variant uppercase">Hora Inicio *</label>
-                  <input 
-                    type="time" 
+                  <input
+                    type="time"
                     required
                     value={eventStartTime}
                     onChange={(e) => setEventStartTime(e.target.value)}
@@ -1513,8 +1502,8 @@ export default function Calendario() {
 
                 <div className="space-y-1">
                   <label className="text-xs font-bold text-on-surface-variant uppercase">Hora Fin *</label>
-                  <input 
-                    type="time" 
+                  <input
+                    type="time"
                     required
                     value={eventEndTime}
                     onChange={(e) => setEventEndTime(e.target.value)}
@@ -1525,7 +1514,7 @@ export default function Calendario() {
 
               <div className="space-y-1">
                 <label className="text-xs font-bold text-on-surface-variant uppercase">Descripción / Observación</label>
-                <textarea 
+                <textarea
                   rows={3}
                   placeholder="Detalles opcionales..."
                   value={eventDescription}
@@ -1560,7 +1549,7 @@ export default function Calendario() {
           <div className="bg-surface-container-lowest rounded-3xl max-w-lg w-full shadow-2xl border border-outline-variant/30 overflow-hidden transform transition-all duration-300 scale-100 flex flex-col">
             {/* Gradient accent line */}
             <div className="h-1.5 w-full bg-gradient-to-r from-primary via-secondary to-tertiary"></div>
-            
+
             {/* Header */}
             <div className="p-6 border-b border-outline-variant/15 flex justify-between items-center bg-surface-container-low/40">
               <h3 className="text-base font-extrabold text-on-surface flex items-center gap-2.5">
@@ -1576,7 +1565,7 @@ export default function Calendario() {
                   </>
                 )}
               </h3>
-              <button 
+              <button
                 onClick={() => setIsEventDetailOpen(false)}
                 className="text-on-surface-variant hover:text-on-surface p-1.5 hover:bg-surface-variant/20 rounded-xl transition-all cursor-pointer"
               >
@@ -1592,7 +1581,7 @@ export default function Calendario() {
                   const sess = selectedEventData.data;
                   const patName = sess.patient?.full_name || 'Paciente';
                   const isPaid = sess.status_payment === 'Pagado';
-                  
+
                   return (
                     <div className="space-y-5">
                       {/* Patient Name Section */}
@@ -1634,9 +1623,8 @@ export default function Calendario() {
                         </div>
                         <div className="bg-surface-container-low p-3.5 rounded-2xl border border-outline-variant/10 space-y-1">
                           <p className="text-[10px] text-on-surface-variant font-bold uppercase tracking-wider">Estado de Pago</p>
-                          <span className={`inline-block text-xs px-2.5 py-1 rounded-md font-semibold mt-1 ${
-                            isPaid ? 'bg-success/10 text-success' : 'bg-error-container/40 text-on-error-container border border-error/10'
-                          }`}>
+                          <span className={`inline-block text-xs px-2.5 py-1 rounded-md font-semibold mt-1 ${isPaid ? 'bg-success/10 text-success' : 'bg-error-container/40 text-on-error-container border border-error/10'
+                            }`}>
                             {sess.status_payment}
                           </span>
                         </div>
@@ -1647,7 +1635,7 @@ export default function Calendario() {
                         <p className="text-xs text-on-surface-variant font-extrabold uppercase tracking-wider">Datos de Contacto</p>
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
                           {sess.patient?.email ? (
-                            <a 
+                            <a
                               href={`mailto:${sess.patient.email}`}
                               className="flex items-center gap-2.5 text-xs text-on-surface hover:text-primary transition-colors bg-surface-container-low px-3 py-2 rounded-xl border border-outline-variant/10 hover:border-primary/20"
                             >
@@ -1661,7 +1649,7 @@ export default function Calendario() {
                             </div>
                           )}
                           {sess.patient?.phone ? (
-                            <a 
+                            <a
                               href={`tel:${sess.patient.phone}`}
                               className="flex items-center gap-2.5 text-xs text-on-surface hover:text-primary transition-colors bg-surface-container-low px-3 py-2 rounded-xl border border-outline-variant/10 hover:border-primary/20"
                             >
@@ -1689,9 +1677,9 @@ export default function Calendario() {
                                   const meetUrl = sess.comentarios_internos.match(/https:\/\/meet\.google\.com\/[a-z-]+/i)?.[0];
                                   if (meetUrl) {
                                     return (
-                                      <a 
-                                        href={meetUrl} 
-                                        target="_blank" 
+                                      <a
+                                        href={meetUrl}
+                                        target="_blank"
                                         rel="noopener noreferrer"
                                         className="inline-flex items-center gap-1.5 px-3 py-2 bg-[#1A3020] text-white hover:bg-[#25442E] rounded-xl text-xs font-bold transition-all shadow-sm cursor-pointer"
                                       >
@@ -1802,7 +1790,7 @@ export default function Calendario() {
                     <span>Editar Evento</span>
                   </button>
                 )}
-                
+
                 <button
                   type="button"
                   onClick={() => setIsEventDetailOpen(false)}
