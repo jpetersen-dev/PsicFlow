@@ -1,7 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import Head from 'next/head';
+import Image from 'next/image';
 import { supabase } from '../lib/supabaseClient';
-import { User, Phone, Calendar, MapPin, Heart, ShieldAlert, CheckCircle2, AlertTriangle, Save } from 'lucide-react';
+import { User, MapPin, Heart, ShieldAlert, CheckCircle2, AlertTriangle, Save, Camera } from 'lucide-react';
 
 export default function PatientProfile() {
   const [patient, setPatient] = useState<any>(null);
@@ -9,6 +10,11 @@ export default function PatientProfile() {
   const [saving, setSaving] = useState(false);
   const [success, setSuccess] = useState('');
   const [error, setError] = useState('');
+
+  // Avatar state
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
+  const [avatarUploading, setAvatarUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Form states
   const [fullName, setFullName] = useState('');
@@ -29,6 +35,11 @@ export default function PatientProfile() {
       try {
         const { data: { session } } = await supabase.auth.getSession();
         if (!session?.user?.id) return;
+
+        // Load avatar from auth metadata (Google or previously uploaded)
+        const meta = session.user.user_metadata;
+        const existingAvatar = meta?.avatar_url || meta?.picture || null;
+        setAvatarUrl(existingAvatar);
 
         const { data, error } = await supabase
           .from('patients')
@@ -63,6 +74,66 @@ export default function PatientProfile() {
 
     fetchPatientData();
   }, []);
+
+  const handleAvatarChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Validate file type and size (max 5MB)
+    if (!file.type.startsWith('image/')) {
+      setError('Por favor selecciona un archivo de imagen válido.');
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      setError('La imagen no puede superar los 5 MB.');
+      return;
+    }
+
+    setAvatarUploading(true);
+    setError('');
+
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.user?.id) throw new Error('No hay sesión activa.');
+
+      const userId = session.user.id;
+      const fileExt = file.name.split('.').pop();
+      const filePath = `${userId}/avatar.${fileExt}`;
+
+      // Upload to Supabase Storage (bucket: avatars)
+      const { error: uploadError } = await supabase.storage
+        .from('avatars')
+        .upload(filePath, file, { upsert: true });
+
+      if (uploadError) throw uploadError;
+
+      // Get public URL
+      const { data: { publicUrl } } = supabase.storage
+        .from('avatars')
+        .getPublicUrl(filePath);
+
+      // Add cache-busting param so the browser shows the new image
+      const urlWithCacheBust = `${publicUrl}?t=${Date.now()}`;
+
+      // Save URL to auth user metadata so Layout picks it up on next load
+      const { error: updateError } = await supabase.auth.updateUser({
+        data: { avatar_url: urlWithCacheBust }
+      });
+
+      if (updateError) throw updateError;
+
+      setAvatarUrl(urlWithCacheBust);
+      setSuccess('¡Foto de perfil actualizada!');
+      setTimeout(() => setSuccess(''), 4000);
+    } catch (err: any) {
+      console.error('Error uploading avatar:', err);
+      setError(err.message || 'Error al subir la foto de perfil.');
+    } finally {
+      setAvatarUploading(false);
+      // Reset input so same file can be re-selected
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -138,6 +209,58 @@ export default function PatientProfile() {
             <span>{error}</span>
           </div>
         )}
+
+        {/* Avatar section */}
+        <div className="bg-white border border-[#F2EFE8] rounded-3xl p-6 shadow-sm flex items-center gap-5">
+          <div className="relative shrink-0">
+            {avatarUrl ? (
+              <Image
+                src={avatarUrl}
+                alt={fullName || 'Foto de perfil'}
+                width={80}
+                height={80}
+                className="w-20 h-20 rounded-full object-cover ring-4 ring-[#DAEDDF]"
+                referrerPolicy="no-referrer"
+              />
+            ) : (
+              <div className="w-20 h-20 rounded-full bg-[#DAEDDF] flex items-center justify-center font-bold text-[#1A3020] text-3xl ring-4 ring-[#DAEDDF]/50">
+                {fullName ? fullName[0].toUpperCase() : '?'}
+              </div>
+            )}
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={avatarUploading}
+              title="Cambiar foto de perfil"
+              className="absolute -bottom-1 -right-1 w-7 h-7 rounded-full bg-[#516750] hover:bg-[#3f513e] flex items-center justify-center text-white shadow-md transition-all disabled:opacity-50 cursor-pointer"
+            >
+              {avatarUploading ? (
+                <div className="w-3.5 h-3.5 rounded-full border-2 border-white border-t-transparent animate-spin" />
+              ) : (
+                <Camera className="w-3.5 h-3.5" />
+              )}
+            </button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={handleAvatarChange}
+            />
+          </div>
+          <div>
+            <p className="font-display font-bold text-base text-[#1C1917]">{fullName || 'Tu nombre'}</p>
+            <p className="text-xs text-[#78716C] mt-0.5">{patient?.email || ''}</p>
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={avatarUploading}
+              className="mt-2 text-xs font-semibold text-[#516750] hover:text-[#3f513e] transition-colors cursor-pointer disabled:opacity-50"
+            >
+              {avatarUploading ? 'Subiendo...' : 'Cambiar foto de perfil'}
+            </button>
+          </div>
+        </div>
 
         <form onSubmit={handleSave} className="space-y-6 pb-12">
           {/* Personal Info Card */}

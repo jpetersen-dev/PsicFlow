@@ -1,22 +1,23 @@
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { useRouter } from 'next/router';
 import {
   LayoutDashboard,
   Calendar,
   Plus,
   User,
-  LogOut,
-  ShieldCheck
+  LogOut
 } from 'lucide-react';
 import { supabase } from '../lib/supabaseClient';
+import { LogoSymbol } from './LogoSymbol';
 
 export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const router = useRouter();
   const noLayoutRoutes = ['/login'];
   const isNoLayout = noLayoutRoutes.some(route => router.pathname.startsWith(route));
 
-  const [profile, setProfile] = useState<{ full_name: string; role_name: string; status?: string } | null>(null);
+  const [profile, setProfile] = useState<{ full_name: string; role_name: string; status?: string; avatar_url?: string } | null>(null);
   const [authChecking, setAuthChecking] = useState(!isNoLayout);
 
   // Auth session check & listener
@@ -56,9 +57,14 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
             .limit(1)
             .maybeSingle();
 
+          // Fetch avatar from auth metadata
+          const { data: { session: currentSession } } = await supabase.auth.getSession();
+          const avatarUrl = currentSession?.user?.user_metadata?.avatar_url || currentSession?.user?.user_metadata?.picture || undefined;
+
           setProfile({
             ...profileData,
-            status: patientData?.status || 'prospecto'
+            status: patientData?.status || 'prospecto',
+            avatar_url: avatarUrl
           });
         } else {
           // Check if patient record exists
@@ -73,7 +79,9 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
             if (patientData.organization_id) {
               localStorage.setItem('active-tenant-id', patientData.organization_id);
             }
-            setProfile({ full_name: patientData.full_name, role_name: 'paciente' });
+            const { data: { session: currentSession } } = await supabase.auth.getSession();
+            const avatarUrl = currentSession?.user?.user_metadata?.avatar_url || currentSession?.user?.user_metadata?.picture || undefined;
+            setProfile({ full_name: patientData.full_name, role_name: 'paciente', avatar_url: avatarUrl });
           } else {
             // Patient doesn't exist by user_id yet. Try to reconcile via Google session.
             const { data: { session } } = await supabase.auth.getSession();
@@ -96,7 +104,9 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
                   if (reconciledProfile.organization_id) {
                     localStorage.setItem('active-tenant-id', reconciledProfile.organization_id);
                   }
-                  setProfile(reconciledProfile);
+                  const { data: { session: currentSession } } = await supabase.auth.getSession();
+                  const avatarUrl = currentSession?.user?.user_metadata?.avatar_url || currentSession?.user?.user_metadata?.picture || undefined;
+                  setProfile({ ...reconciledProfile, avatar_url: avatarUrl });
                   return;
                 }
               }
@@ -170,9 +180,9 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
     <div className="min-h-screen bg-[#FCFBF9] text-[#1C1917] flex flex-col md:flex-row font-sans w-full">
       {/* Desktop Sidebar (visible on md and up) */}
       <aside className="hidden md:flex md:w-64 bg-white border-r border-[#F2EFE8] flex-col shrink-0">
-        <div className="h-16 flex items-center px-6 border-b border-[#F2EFE8] gap-2">
-          <div className="w-8 h-8 rounded-full bg-[#DAEDDF] flex items-center justify-center text-[#1A3020]">
-            <ShieldCheck className="w-5 h-5" />
+        <div className="h-16 flex items-center px-6 border-b border-[#F2EFE8] gap-2.5">
+          <div className="w-8 h-8 rounded-full bg-[#1A3020] flex items-center justify-center text-[#DAEDDF] shrink-0">
+            <LogoSymbol className="w-5 h-5" />
           </div>
           <div className="flex flex-col">
             <span className="font-display font-bold text-sm text-[#1C1917] tracking-tight">Sentido Migrante</span>
@@ -218,8 +228,8 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
         {/* Mobile Header (visible on md:hidden) */}
         <header className="md:hidden h-14 bg-white border-b border-[#F2EFE8] flex items-center justify-between px-4 sticky top-0 z-40">
           <div className="flex items-center gap-2">
-            <div className="w-7 h-7 rounded-full bg-[#DAEDDF] flex items-center justify-center text-[#1A3020]">
-              <ShieldCheck className="w-4 h-4" />
+            <div className="w-7 h-7 rounded-full bg-[#1A3020] flex items-center justify-center text-[#DAEDDF] shrink-0">
+              <LogoSymbol className="w-4 h-4" />
             </div>
             <span className="font-display font-bold text-sm text-[#1C1917]">Sentido Migrante</span>
           </div>
@@ -242,9 +252,20 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
           </h2>
           {profile && (
             <div className="flex items-center gap-3">
-              <div className="w-8 h-8 rounded-full bg-[#DAEDDF] flex items-center justify-center font-bold text-[#1A3020] text-sm">
-                {profile.full_name ? profile.full_name[0] : '?'}
-              </div>
+              {profile.avatar_url ? (
+                <Image
+                  src={profile.avatar_url}
+                  alt={profile.full_name || 'Avatar'}
+                  width={32}
+                  height={32}
+                  className="w-8 h-8 rounded-full object-cover ring-2 ring-[#DAEDDF]"
+                  referrerPolicy="no-referrer"
+                />
+              ) : (
+                <div className="w-8 h-8 rounded-full bg-[#DAEDDF] flex items-center justify-center font-bold text-[#1A3020] text-sm">
+                  {profile.full_name ? profile.full_name[0].toUpperCase() : '?'}
+                </div>
+              )}
               <div className="text-left">
                 <p className="text-sm font-semibold text-[#1C1917] leading-none">{profile.full_name}</p>
                 <p className="text-[10px] text-[#78716C] mt-0.5">Paciente</p>
