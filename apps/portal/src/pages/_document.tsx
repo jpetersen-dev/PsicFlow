@@ -4,7 +4,7 @@ export default function Document() {
   return (
     <Html lang="es">
       <Head>
-        <link rel="icon" type="image/png" href="/simbolo_sentidomigrante_color.png" />
+        <link rel="icon" type="image/svg+xml" href="/logo_sm.svg" />
       </Head>
       <body className="antialiased">
         <Main />
