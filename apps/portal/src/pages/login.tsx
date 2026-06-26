@@ -4,6 +4,7 @@ import { useRouter } from 'next/router';
 import { supabase } from '../lib/supabaseClient';
 import { Mail, Lock, User, Phone, Calendar, AlertTriangle, ArrowRight, ShieldCheck, CheckCircle2 } from 'lucide-react';
 import { validateEmail } from '../utils/validators';
+import { LogoSymbol } from '../components/LogoSymbol';
 
 export default function PatientLogin() {
   const router = useRouter();
@@ -224,8 +225,8 @@ export default function PatientLogin() {
         {/* Decorative Brand Header */}
         <div className="text-center mb-8 max-w-sm">
           <div className="flex justify-center mb-3">
-            <div className="w-12 h-12 rounded-full bg-[#DAEDDF] flex items-center justify-center text-[#1A3020]">
-              <ShieldCheck className="w-6 h-6" />
+            <div className="w-12 h-12 rounded-full bg-[#DAEDDF] flex items-center justify-center text-[#1A3020] p-2.5">
+              <LogoSymbol className="w-full h-full" />
             </div>
           </div>
           <h2 className="font-display text-2xl font-bold text-[#1C1917] tracking-tight">Sentido Migrante</h2>
