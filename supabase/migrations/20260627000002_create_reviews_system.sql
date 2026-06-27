@@ -41,7 +41,7 @@ CREATE POLICY "Allow specialists/admins to view organization reviews" ON public.
   USING (
     EXISTS (
       SELECT 1 FROM public.profiles my_profile
-      WHERE my_profile.id = auth.uid()
+      WHERE my_profile.user_id = auth.uid()
         AND my_profile.organization_id = (
           SELECT p.organization_id FROM public.profiles p WHERE p.id = specialist_id
         )

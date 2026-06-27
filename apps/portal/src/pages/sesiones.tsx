@@ -48,14 +48,15 @@ export default function PatientSessionsList() {
           setSessions(sessData);
         }
 
-        // Get reviews submitted by this patient to mark completed therapists
+        // Get reviews submitted by this patient to mark completed sessions
         const { data: reviewsData } = await supabase
           .from('reviews')
-          .select('specialist_id')
+          .select('session_id')
           .eq('patient_id', patData.id);
         
         if (reviewsData) {
-          setReviewedSessionIds(reviewsData.map(r => r.specialist_id));
+          const ids = reviewsData.map(r => r.session_id).filter(Boolean);
+          setReviewedSessionIds(ids);
         }
       }
     } catch (err) {
@@ -107,6 +108,7 @@ export default function PatientSessionsList() {
         .insert({
           specialist_id: selectedSessionForReview.professional_id,
           patient_id: patient.id,
+          session_id: selectedSessionForReview.id,
           rating: reviewRating,
           comment: reviewComment.trim(),
           patient_name: displayName,
@@ -121,7 +123,7 @@ export default function PatientSessionsList() {
       setShowReviewModal(false);
       
       // Marcar como valorada localmente
-      setReviewedSessionIds(prev => [...prev, selectedSessionForReview.professional_id]);
+      setReviewedSessionIds(prev => [...prev, selectedSessionForReview.id]);
     } catch (err: any) {
       alert('Error al guardar reseña: ' + err.message);
     } finally {
@@ -243,7 +245,7 @@ export default function PatientSessionsList() {
                   <div className="w-full md:w-auto flex flex-col items-stretch md:items-end gap-3 shrink-0">
                     {/* Botón de dejar reseña destacado para sesiones completadas */}
                     {sess.status_session === 'Completa' && !isCancelled && (
-                      reviewedSessionIds.includes(sess.professional_id) ? (
+                      reviewedSessionIds.includes(sess.id) ? (
                         <div className="flex items-center gap-1.5 text-xs text-green-700 font-semibold bg-green-50 px-3 py-1.5 border border-green-100 rounded-xl select-none">
                           <CheckCircle2 className="w-4 h-4 text-green-600" />
                           <span>Reseña Enviada</span>
