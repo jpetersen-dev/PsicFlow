@@ -31,7 +31,9 @@ CREATE POLICY "Allow public read of approved public reviews" ON public.reviews
 CREATE POLICY "Allow patients to insert reviews" ON public.reviews
   FOR INSERT
   TO authenticated
-  WITH CHECK (auth.uid() = patient_id);
+  WITH CHECK (
+    auth.uid() = (SELECT user_id FROM public.patients WHERE id = patient_id)
+  );
 
 CREATE POLICY "Allow specialists/admins to view organization reviews" ON public.reviews
   FOR ALL
