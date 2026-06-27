@@ -22,7 +22,8 @@ import {
   Bell,
   Settings,
   ShieldCheck,
-  Star
+  Star,
+  Newspaper
 } from 'lucide-react';
 import { supabase } from '../lib/supabaseClient';
 import { NewClinicModal } from './NewClinicModal';
@@ -261,6 +262,7 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
     { name: 'Biblioteca', href: '/biblioteca', icon: BookOpen },
     { name: 'Centro Documentos', href: '/documentos', icon: FileText },
     { name: 'Reseñas Pacientes', href: '/resenas', icon: Star },
+    { name: 'Publicaciones', href: '/publicaciones', icon: Newspaper },
     { name: 'Mi Perfil', href: '/perfil', icon: User }
   ];
 
