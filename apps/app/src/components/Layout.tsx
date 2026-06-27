@@ -21,7 +21,8 @@ import {
   LogOut,
   Bell,
   Settings,
-  ShieldCheck
+  ShieldCheck,
+  Star
 } from 'lucide-react';
 import { supabase } from '../lib/supabaseClient';
 import { NewClinicModal } from './NewClinicModal';
@@ -259,6 +260,7 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
     { name: 'Reportes y Finanzas', href: '/reportes', icon: BarChart3 },
     { name: 'Biblioteca', href: '/biblioteca', icon: BookOpen },
     { name: 'Centro Documentos', href: '/documentos', icon: FileText },
+    { name: 'Reseñas Pacientes', href: '/resenas', icon: Star },
     { name: 'Mi Perfil', href: '/perfil', icon: User }
   ];
 
