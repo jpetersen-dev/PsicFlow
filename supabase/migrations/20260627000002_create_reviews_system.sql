@@ -4,7 +4,7 @@
 CREATE TABLE IF NOT EXISTS public.reviews (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   specialist_id uuid NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
-  patient_id uuid REFERENCES public.profiles(id) ON DELETE SET NULL,
+  patient_id uuid REFERENCES public.patients(id) ON DELETE SET NULL,
   rating integer NOT NULL CHECK (rating >= 1 AND rating <= 5),
   comment text NOT NULL,
   patient_name text DEFAULT 'Anónimo',
