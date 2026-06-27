@@ -44,6 +44,13 @@ export default function Perfil() {
   const [workStartHour, setWorkStartHour] = useState(8);
   const [workEndHour, setWorkEndHour] = useState(20);
   
+  // Nuevos campos para la Landing Page
+  const [educationText, setEducationText] = useState('');
+  const [specialtiesText, setSpecialtiesText] = useState('');
+  const [languagesText, setLanguagesText] = useState('');
+  const [quote, setQuote] = useState('');
+  const [location, setLocation] = useState('');
+  
   // Toggles states
   const [notifyInquiries, setNotifyInquiries] = useState(true);
   const [notifyReminders, setNotifyReminders] = useState(true);
@@ -272,9 +279,16 @@ export default function Perfil() {
         if (profData.specialization) setSpecialization(profData.specialization);
         if (profData.experience !== undefined && profData.experience !== null) setExperience(profData.experience);
         if (profData.bio) setBio(profData.bio);
-        if (profData.timezone) setTimezone(profData.timezone);
+         if (profData.timezone) setTimezone(profData.timezone);
         if (profData.work_start_hour !== undefined && profData.work_start_hour !== null) setWorkStartHour(profData.work_start_hour);
         if (profData.work_end_hour !== undefined && profData.work_end_hour !== null) setWorkEndHour(profData.work_end_hour);
+        
+        // Inicializar nuevos campos
+        if (profData.education) setEducationText(profData.education.join('\n'));
+        if (profData.specialties) setSpecialtiesText(profData.specialties.join('\n'));
+        if (profData.languages) setLanguagesText(profData.languages.join('\n'));
+        if (profData.quote) setQuote(profData.quote);
+        if (profData.location) setLocation(profData.location);
       }
 
       // Get organization details
@@ -475,10 +489,15 @@ export default function Perfil() {
           email: email.trim().toLowerCase(),
           specialization,
           experience: Number(experience),
-          bio,
+           bio,
           timezone,
           work_start_hour: Number(workStartHour),
-          work_end_hour: Number(workEndHour)
+          work_end_hour: Number(workEndHour),
+          education: educationText.split('\n').map(line => line.trim()).filter(Boolean),
+          specialties: specialtiesText.split('\n').map(line => line.trim()).filter(Boolean),
+          languages: languagesText.split('\n').map(line => line.trim()).filter(Boolean),
+          quote: quote.trim(),
+          location: location.trim()
         })
         .eq('id', profile.id);
 
@@ -685,6 +704,28 @@ export default function Perfil() {
                 </div>
 
                 <div className="space-y-2">
+                  <label className="font-label-md text-on-surface-variant text-xs font-semibold">Ubicación y Cobertura (se muestra en la Landing Page)</label>
+                  <input 
+                    type="text" 
+                    value={location}
+                    onChange={(e) => setLocation(e.target.value)}
+                    placeholder="e.g. Zúrich, Suiza (Atención Online y Presencial)"
+                    className="w-full bg-surface-container-low border border-outline-variant/20 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary/20 focus:outline-none"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <label className="font-label-md text-on-surface-variant text-xs font-semibold">Cita o Frase Clínico-Filosófica (se muestra en la Landing Page)</label>
+                  <input 
+                    type="text" 
+                    value={quote}
+                    onChange={(e) => setQuote(e.target.value)}
+                    placeholder="e.g. El dolor es el umbral para nacer a un nuevo sentido de vida."
+                    className="w-full bg-surface-container-low border border-outline-variant/20 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary/20 focus:outline-none"
+                  />
+                </div>
+
+                <div className="space-y-2">
                   <label className="font-label-md text-on-surface-variant text-xs">Biografía Profesional</label>
                   <textarea 
                     value={bio}
@@ -692,6 +733,36 @@ export default function Perfil() {
                     className="w-full bg-surface-container-low border border-outline-variant/20 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary/20 focus:outline-none h-28 resize-none" 
                   ></textarea>
                   <p className="text-[10px] text-on-surface-variant text-right">Firma clínica digital activa.</p>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                  <div className="space-y-2">
+                    <label className="font-label-md text-on-surface-variant text-xs font-semibold">Formación (un ítem por línea)</label>
+                    <textarea 
+                      value={educationText}
+                      onChange={(e) => setEducationText(e.target.value)}
+                      placeholder="e.g. Psicólogo Clínico - Univ. de Chile&#10;Diplomado en Terapia Familiar"
+                      className="w-full bg-surface-container-low border border-outline-variant/20 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary/20 focus:outline-none h-32"
+                    ></textarea>
+                  </div>
+                  <div className="space-y-2">
+                    <label className="font-label-md text-on-surface-variant text-xs font-semibold">Especialidades (un ítem por línea)</label>
+                    <textarea 
+                      value={specialtiesText}
+                      onChange={(e) => setSpecialtiesText(e.target.value)}
+                      placeholder="e.g. Duelo Migratorio&#10;Estrés Transcultural&#10;Ansiedad"
+                      className="w-full bg-surface-container-low border border-outline-variant/20 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary/20 focus:outline-none h-32"
+                    ></textarea>
+                  </div>
+                  <div className="space-y-2">
+                    <label className="font-label-md text-on-surface-variant text-xs font-semibold">Idiomas de Atención (un ítem por línea)</label>
+                    <textarea 
+                      value={languagesText}
+                      onChange={(e) => setLanguagesText(e.target.value)}
+                      placeholder="e.g. Español (Nativo)&#10;Inglés (B2)"
+                      className="w-full bg-surface-container-low border border-outline-variant/20 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary/20 focus:outline-none h-32"
+                    ></textarea>
+                  </div>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
