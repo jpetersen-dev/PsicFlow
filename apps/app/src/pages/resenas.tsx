@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import Head from 'next/head';
 import { supabase } from '../lib/supabaseClient';
-import { Layout } from '../components/Layout';
 import { Star, MessageSquare, Check, X, ShieldAlert, Eye, EyeOff, Calendar, User } from 'lucide-react';
 
 export default function ResenasAdmin() {
@@ -94,7 +93,7 @@ export default function ResenasAdmin() {
   };
 
   return (
-    <Layout>
+    <>
       <Head>
         <title>Gestión de Reseñas - PsicFlow</title>
       </Head>
@@ -273,6 +272,6 @@ export default function ResenasAdmin() {
           </div>
         )}
       </div>
-    </Layout>
+    </>
   );
 }
