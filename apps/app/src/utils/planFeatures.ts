@@ -16,16 +16,16 @@ export interface PlanFeatures {
 export const PLAN_FEATURES: Record<PlanLevel, PlanFeatures> = {
   Starter: {
     portal: false,
-    booking: false,
+    booking: true,
     blog: false,
     reviews: false,
     maxUsers: 1,
   },
   Pro: {
     portal: false,
-    booking: false,
+    booking: true,
     blog: false,
-    reviews: false,
+    reviews: true,
     maxUsers: 5,
   },
   Enterprise: {
