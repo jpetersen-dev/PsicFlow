@@ -55,17 +55,13 @@ export async function verifyFeatureForOrganization(
   organizationId: string,
   feature: keyof Omit<PlanFeatures, 'maxUsers'>
 ): Promise<boolean> {
-  // Bypasses RLS since it's checking organization status for public API
   try {
     const supabase = createClient(supabaseUrl, supabaseAnonKey);
-    const { data, error } = await supabase
-      .from('organizations')
-      .select('current_plan')
-      .eq('id', organizationId)
-      .maybeSingle();
+    const { data: planLevel, error } = await supabase
+      .rpc('get_organization_plan', { p_organization_id: organizationId });
 
-    if (error || !data) return false;
-    return hasFeature(data.current_plan, feature);
+    if (error || !planLevel) return false;
+    return hasFeature(planLevel, feature);
   } catch (err) {
     console.error('Error in verifyFeatureForOrganization:', err);
     return false;

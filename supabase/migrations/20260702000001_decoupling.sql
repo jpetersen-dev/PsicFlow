@@ -140,3 +140,14 @@ INSERT INTO public.organization_payment_gateways (
 UPDATE public.organizations
 SET current_plan = 'Enterprise'
 WHERE id = 'fa28bcff-1321-4cb4-b5ef-64ffed1662cb';
+
+-- 5. Create get_organization_plan SECURITY DEFINER helper to bypass RLS for public APIs
+CREATE OR REPLACE FUNCTION public.get_organization_plan(p_organization_id uuid)
+RETURNS text
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+BEGIN
+  RETURN (SELECT current_plan FROM public.organizations WHERE id = p_organization_id);
+END;
+$$;
