@@ -21,10 +21,43 @@ import {
   Globe
 } from 'lucide-react';
 import { supabase } from '../lib/supabaseClient';
+import { hasFeature } from '../utils/planFeatures';
 
 export default function Perfil() {
   const router = useRouter();
   const [profile, setProfile] = useState<any>(null);
+  
+  // Booking Settings States
+  const [bookingPrefix, setBookingPrefix] = useState('PF');
+  const [bookingCurrency, setBookingCurrency] = useState('CLP');
+  const [termsText, setTermsText] = useState('');
+  const [sandboxMode, setSandboxMode] = useState(false);
+  
+  // Wise details
+  const [wiseChfLink, setWiseChfLink] = useState('');
+  const [wiseChfIban, setWiseChfIban] = useState('');
+  const [wiseChfBic, setWiseChfBic] = useState('');
+  const [wiseChfHolder, setWiseChfHolder] = useState('');
+  const [wiseChfBank, setWiseChfBank] = useState('');
+  const [wiseChfAddress, setWiseChfAddress] = useState('');
+
+  const [wiseEurLink, setWiseEurLink] = useState('');
+  const [wiseEurIban, setWiseEurIban] = useState('');
+  const [wiseEurBic, setWiseEurBic] = useState('');
+  const [wiseEurHolder, setWiseEurHolder] = useState('');
+  const [wiseEurBank, setWiseEurBank] = useState('');
+  const [wiseEurAddress, setWiseEurAddress] = useState('');
+
+  // Gateway Toggles & Credentials
+  const [wiseActive, setWiseActive] = useState(false);
+  
+  const [stripeActive, setStripeActive] = useState(false);
+  const [stripePublicKey, setStripePublicKey] = useState('');
+  const [stripeSecretKey, setStripeSecretKey] = useState('');
+
+  const [mpActive, setMpActive] = useState(false);
+  const [mpPublicKey, setMpPublicKey] = useState('');
+  const [mpSecretKey, setMpSecretKey] = useState('');
   const [organization, setOrganization] = useState<any>(null);
   const [userClinics, setUserClinics] = useState<any[]>([]);
   
@@ -305,6 +338,70 @@ export default function Perfil() {
         setOrganization(orgData);
       }
 
+      // Get booking settings
+      const { data: bookData, error: bookError } = await supabase
+        .from('booking_settings')
+        .select('*')
+        .eq('organization_id', activeTenant)
+        .maybeSingle();
+
+      if (!bookError && bookData) {
+        setBookingPrefix(bookData.booking_prefix || 'PF');
+        setBookingCurrency(bookData.currency || 'CLP');
+        setTermsText(bookData.terms_text || '');
+        setSandboxMode(bookData.sandbox_mode || false);
+        
+        const links = bookData.payment_links || {};
+        setWiseChfLink(links.CH || '');
+        setWiseEurLink(links.DE || '');
+        
+        const bank = bookData.bank_transfer_details || {};
+        const chBank = bank.CH || {};
+        setWiseChfIban(chBank.iban || '');
+        setWiseChfBic(chBank.bic || '');
+        setWiseChfHolder(chBank.holder || '');
+        setWiseChfBank(chBank.bankName || '');
+        setWiseChfAddress(chBank.address || '');
+
+        const deBank = bank.DE || {};
+        setWiseEurIban(deBank.iban || '');
+        setWiseEurBic(deBank.bic || '');
+        setWiseEurHolder(deBank.holder || '');
+        setWiseEurBank(deBank.bankName || '');
+        setWiseEurAddress(deBank.address || '');
+      }
+
+      // Get payment gateways
+      const { data: gatewaysData, error: gatewaysError } = await supabase
+        .from('organization_payment_gateways')
+        .select('*')
+        .eq('organization_id', activeTenant);
+
+      if (!gatewaysError && gatewaysData) {
+        // Reset states
+        setWiseActive(false);
+        setStripeActive(false);
+        setStripePublicKey('');
+        setStripeSecretKey('');
+        setMpActive(false);
+        setMpPublicKey('');
+        setMpSecretKey('');
+
+        gatewaysData.forEach((g: any) => {
+          if (g.provider === 'wise') {
+            setWiseActive(g.is_active);
+          } else if (g.provider === 'stripe') {
+            setStripeActive(g.is_active);
+            setStripePublicKey(g.credentials?.publicKey || '');
+            setStripeSecretKey(g.credentials?.secretKey || '');
+          } else if (g.provider === 'mercadopago') {
+            setMpActive(g.is_active);
+            setMpPublicKey(g.credentials?.publicKey || '');
+            setMpSecretKey(g.credentials?.secretKey || '');
+          }
+        });
+      }
+
       // Get all user clinics
       await fetchUserClinics(session.user.id);
 
@@ -384,6 +481,96 @@ export default function Perfil() {
       }
     } catch (err: any) {
       alert('Error al eliminar la clínica: ' + err.message);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleSaveBookingSettings = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSubmitting(true);
+    try {
+      const activeTenant = localStorage.getItem('active-tenant-id');
+      if (!activeTenant) return;
+
+      const paymentLinks = {
+        CH: wiseChfLink,
+        DE: wiseEurLink
+      };
+
+      const bankTransferDetails = {
+        CH: {
+          iban: wiseChfIban,
+          bic: wiseChfBic,
+          holder: wiseChfHolder,
+          bankName: wiseChfBank,
+          address: wiseChfAddress
+        },
+        DE: {
+          iban: wiseEurIban,
+          bic: wiseEurBic,
+          holder: wiseEurHolder,
+          bankName: wiseEurBank,
+          address: wiseEurAddress
+        }
+      };
+
+      const { error: bookErr } = await supabase
+        .from('booking_settings')
+        .upsert({
+          organization_id: activeTenant,
+          booking_prefix: bookingPrefix,
+          currency: bookingCurrency,
+          payment_links: paymentLinks,
+          bank_transfer_details: bankTransferDetails,
+          terms_text: termsText,
+          sandbox_mode: sandboxMode
+        }, { onConflict: 'organization_id' });
+
+      if (bookErr) throw bookErr;
+
+      const gateways = [
+        {
+          provider: 'wise',
+          is_active: wiseActive,
+          credentials: {}
+        },
+        {
+          provider: 'stripe',
+          is_active: stripeActive,
+          credentials: {
+            publicKey: stripePublicKey,
+            secretKey: stripeSecretKey
+          }
+        },
+        {
+          provider: 'mercadopago',
+          is_active: mpActive,
+          credentials: {
+            publicKey: mpPublicKey,
+            secretKey: mpSecretKey
+          }
+        }
+      ];
+
+      for (const g of gateways) {
+        const { error: gateErr } = await supabase
+          .from('organization_payment_gateways')
+          .upsert({
+            organization_id: activeTenant,
+            provider: g.provider,
+            is_active: g.is_active,
+            credentials: g.credentials
+          }, { onConflict: 'organization_id,provider' });
+
+        if (gateErr) throw gateErr;
+      }
+
+      alert('Configuración de reservas y pagos guardada exitosamente.');
+      await fetchProfileAndOrg();
+    } catch (err: any) {
+      console.error(err);
+      alert('Error al guardar configuración: ' + err.message);
     } finally {
       setSubmitting(false);
     }
@@ -1201,6 +1388,291 @@ export default function Perfil() {
               </div>
             </div>
           </section>
+
+          {/* Booking & Payments Config Section (Visible only if organization has booking feature and user is admin) */}
+          {hasFeature(organization?.current_plan, 'booking') && profile?.role_name === 'admin_clinica' && (
+            <section className="col-span-12 bg-surface-container-lowest rounded-xl p-8 shadow-[0px_4px_12px_rgba(0,0,0,0.03)] border border-outline-variant/10 space-y-6">
+              <div className="border-b border-outline-variant/25 pb-4">
+                <h3 className="font-headline-sm text-headline-sm text-on-surface font-bold flex items-center gap-2">
+                  <Wallet className="w-5 h-5 text-primary" />
+                  <span>Configuración de Reservas y Pagos</span>
+                </h3>
+                <p className="text-body-sm text-on-surface-variant text-sm mt-1">
+                  Administra la integración pública del calendario de agendamiento y configura los procesadores de pago para la clínica.
+                </p>
+              </div>
+
+              <form onSubmit={handleSaveBookingSettings} className="space-y-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="space-y-2">
+                    <label className="font-label-md text-on-surface-variant text-xs">Prefijo de Transacción (Ej: SM para Sentido Migrante)</label>
+                    <input 
+                      type="text" 
+                      required
+                      value={bookingPrefix}
+                      onChange={(e) => setBookingPrefix(e.target.value.toUpperCase().slice(0, 5))}
+                      placeholder="e.g. SM"
+                      className="w-full bg-surface-container-low border border-outline-variant/20 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary/20 focus:outline-none" 
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="font-label-md text-on-surface-variant text-xs">Moneda Principal</label>
+                    <select
+                      value={bookingCurrency}
+                      onChange={(e) => setBookingCurrency(e.target.value)}
+                      className="w-full bg-surface-container-low border border-outline-variant/20 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary/20 focus:outline-none cursor-pointer"
+                    >
+                      <option value="CLP">CLP (Peso Chileno)</option>
+                      <option value="CHF">CHF (Franco Suizo)</option>
+                      <option value="EUR">EUR (Euro)</option>
+                      <option value="USD">USD (Dólar Americano)</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2 p-3 bg-primary/5 border border-primary/10 rounded-lg">
+                  <input 
+                    type="checkbox" 
+                    id="sandboxMode" 
+                    checked={sandboxMode}
+                    onChange={(e) => setSandboxMode(e.target.checked)}
+                    className="accent-primary cursor-pointer w-4 h-4" 
+                  />
+                  <label htmlFor="sandboxMode" className="cursor-pointer select-none text-xs font-medium text-on-surface-variant">
+                    Habilitar <strong>Modo Sandbox (Pruebas)</strong>: Se usarán las credenciales test de las pasarelas y se mostrará un banner de pruebas en el agendamiento.
+                  </label>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="font-label-md text-on-surface-variant text-xs font-semibold">Términos, Consentimiento y Protocolo de Crisis (se muestra al reservar)</label>
+                  <textarea 
+                    value={termsText}
+                    onChange={(e) => setTermsText(e.target.value)}
+                    placeholder="e.g. Comprendo y acepto el Protocolo de Crisis Transnacional..."
+                    className="w-full bg-surface-container-low border border-outline-variant/20 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary/20 focus:outline-none h-24 resize-none" 
+                  ></textarea>
+                </div>
+
+                {/* Pasarelas de Pago Toggles */}
+                <div className="space-y-4 border-t border-outline-variant/15 pt-4">
+                  <h4 className="text-xs font-bold text-primary tracking-wide uppercase">Pasarelas de Pago Activas</h4>
+                  
+                  {/* Wise and Manual Transfers */}
+                  <div className="p-4 bg-surface-container-low rounded-xl border border-outline-variant/10 space-y-4">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="font-label-md text-sm text-on-surface font-semibold">Wise & Transferencia Bancaria Manual</p>
+                        <p className="text-[11px] text-on-surface-variant">Mostrar instrucciones bancarias de Wise e IBANs para Suiza y Alemania en la reserva.</p>
+                      </div>
+                      <label className="relative inline-flex items-center cursor-pointer">
+                        <input 
+                          type="checkbox" 
+                          checked={wiseActive}
+                          onChange={(e) => setWiseActive(e.target.checked)}
+                          className="sr-only peer" 
+                        />
+                        <div className="w-9 h-5 bg-outline-variant/40 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-primary"></div>
+                      </label>
+                    </div>
+
+                    {wiseActive && (
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4 border-t border-outline-variant/15">
+                        {/* Wise CHF Switzerland */}
+                        <div className="space-y-3">
+                          <h5 className="text-xs font-bold text-primary">Configuración Wise Suiza (CHF)</h5>
+                          <input 
+                            type="text" 
+                            placeholder="Wise Link CHF (https://wise.com/...)"
+                            value={wiseChfLink}
+                            onChange={(e) => setWiseChfLink(e.target.value)}
+                            className="w-full bg-surface-container-lowest border border-outline-variant/20 rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-primary"
+                          />
+                          <input 
+                            type="text" 
+                            placeholder="Titular de la Cuenta"
+                            value={wiseChfHolder}
+                            onChange={(e) => setWiseChfHolder(e.target.value)}
+                            className="w-full bg-surface-container-lowest border border-outline-variant/20 rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-primary"
+                          />
+                          <input 
+                            type="text" 
+                            placeholder="IBAN CHF"
+                            value={wiseChfIban}
+                            onChange={(e) => setWiseChfIban(e.target.value)}
+                            className="w-full bg-surface-container-lowest border border-outline-variant/20 rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-primary"
+                          />
+                          <input 
+                            type="text" 
+                            placeholder="BIC / SWIFT"
+                            value={wiseChfBic}
+                            onChange={(e) => setWiseChfBic(e.target.value)}
+                            className="w-full bg-surface-container-lowest border border-outline-variant/20 rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-primary"
+                          />
+                          <input 
+                            type="text" 
+                            placeholder="Nombre del Banco"
+                            value={wiseChfBank}
+                            onChange={(e) => setWiseChfBank(e.target.value)}
+                            className="w-full bg-surface-container-lowest border border-outline-variant/20 rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-primary"
+                          />
+                          <textarea 
+                            placeholder="Dirección del Banco"
+                            value={wiseChfAddress}
+                            onChange={(e) => setWiseChfAddress(e.target.value)}
+                            className="w-full bg-surface-container-lowest border border-outline-variant/20 rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-primary h-12 resize-none"
+                          />
+                        </div>
+
+                        {/* Wise EUR Germany */}
+                        <div className="space-y-3">
+                          <h5 className="text-xs font-bold text-primary">Configuración Wise Alemania/Europa (EUR)</h5>
+                          <input 
+                            type="text" 
+                            placeholder="Wise Link EUR (https://wise.com/...)"
+                            value={wiseEurLink}
+                            onChange={(e) => setWiseEurLink(e.target.value)}
+                            className="w-full bg-surface-container-lowest border border-outline-variant/20 rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-primary"
+                          />
+                          <input 
+                            type="text" 
+                            placeholder="Titular de la Cuenta"
+                            value={wiseEurHolder}
+                            onChange={(e) => setWiseEurHolder(e.target.value)}
+                            className="w-full bg-surface-container-lowest border border-outline-variant/20 rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-primary"
+                          />
+                          <input 
+                            type="text" 
+                            placeholder="IBAN EUR"
+                            value={wiseEurIban}
+                            onChange={(e) => setWiseEurIban(e.target.value)}
+                            className="w-full bg-surface-container-lowest border border-outline-variant/20 rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-primary"
+                          />
+                          <input 
+                            type="text" 
+                            placeholder="BIC / SWIFT"
+                            value={wiseEurBic}
+                            onChange={(e) => setWiseEurBic(e.target.value)}
+                            className="w-full bg-surface-container-lowest border border-outline-variant/20 rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-primary"
+                          />
+                          <input 
+                            type="text" 
+                            placeholder="Nombre del Banco"
+                            value={wiseEurBank}
+                            onChange={(e) => setWiseEurBank(e.target.value)}
+                            className="w-full bg-surface-container-lowest border border-outline-variant/20 rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-primary"
+                          />
+                          <textarea 
+                            placeholder="Dirección del Banco"
+                            value={wiseEurAddress}
+                            onChange={(e) => setWiseEurAddress(e.target.value)}
+                            className="w-full bg-surface-container-lowest border border-outline-variant/20 rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-primary h-12 resize-none"
+                          />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Stripe Integration */}
+                  <div className="p-4 bg-surface-container-low rounded-xl border border-outline-variant/10 space-y-4">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="font-label-md text-sm text-on-surface font-semibold">Pasarela Stripe (Tarjetas / Apple Pay / Google Pay)</p>
+                        <p className="text-[11px] text-on-surface-variant">Habilitar cobro directo automatizado.</p>
+                      </div>
+                      <label className="relative inline-flex items-center cursor-pointer">
+                        <input 
+                          type="checkbox" 
+                          checked={stripeActive}
+                          onChange={(e) => setStripeActive(e.target.checked)}
+                          className="sr-only peer" 
+                        />
+                        <div className="w-9 h-5 bg-outline-variant/40 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-primary"></div>
+                      </label>
+                    </div>
+
+                    {stripeActive && (
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
+                        <div className="space-y-1">
+                          <label className="text-[10px] font-bold text-primary uppercase">Stripe Public Key</label>
+                          <input 
+                            type="text" 
+                            value={stripePublicKey}
+                            onChange={(e) => setStripePublicKey(e.target.value)}
+                            placeholder="pk_test_..."
+                            className="w-full bg-surface-container-lowest border border-outline-variant/20 rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-primary"
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-[10px] font-bold text-primary uppercase">Stripe Secret Key</label>
+                          <input 
+                            type="password" 
+                            value={stripeSecretKey}
+                            onChange={(e) => setStripeSecretKey(e.target.value)}
+                            placeholder="sk_test_..."
+                            className="w-full bg-surface-container-lowest border border-outline-variant/20 rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-primary"
+                          />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* MercadoPago Integration */}
+                  <div className="p-4 bg-surface-container-low rounded-xl border border-outline-variant/10 space-y-4">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="font-label-md text-sm text-on-surface font-semibold">Pasarela MercadoPago (Chile - Webpay / Khipu)</p>
+                        <p className="text-[11px] text-on-surface-variant">Habilitar cobro directo automatizado en Pesos Chilenos.</p>
+                      </div>
+                      <label className="relative inline-flex items-center cursor-pointer">
+                        <input 
+                          type="checkbox" 
+                          checked={mpActive}
+                          onChange={(e) => setMpActive(e.target.checked)}
+                          className="sr-only peer" 
+                        />
+                        <div className="w-9 h-5 bg-outline-variant/40 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-primary"></div>
+                      </label>
+                    </div>
+
+                    {mpActive && (
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
+                        <div className="space-y-1">
+                          <label className="text-[10px] font-bold text-primary uppercase">MercadoPago Public Key</label>
+                          <input 
+                            type="text" 
+                            value={mpPublicKey}
+                            onChange={(e) => setMpPublicKey(e.target.value)}
+                            placeholder="APP_USR-..."
+                            className="w-full bg-surface-container-lowest border border-outline-variant/20 rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-primary"
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-[10px] font-bold text-primary uppercase">MercadoPago Access Token</label>
+                          <input 
+                            type="password" 
+                            value={mpSecretKey}
+                            onChange={(e) => setMpSecretKey(e.target.value)}
+                            placeholder="APP_USR-..."
+                            className="w-full bg-surface-container-lowest border border-outline-variant/20 rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-primary"
+                          />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <div className="flex justify-end pt-4 border-t border-outline-variant/15">
+                  <button 
+                    type="submit" 
+                    disabled={submitting}
+                    className="px-6 py-2.5 bg-primary text-on-primary rounded-lg font-label-md shadow-sm hover:bg-primary-container transition-all cursor-pointer disabled:opacity-50 font-semibold"
+                  >
+                    {submitting ? 'Guardando...' : 'Guardar Configuración de Pagos'}
+                  </button>
+                </div>
+              </form>
+            </section>
+          )}
 
           {/* Column 5: Workspace Switcher and Clinic Management (12/12 width) */}
           <section className="col-span-12 bg-surface-container-lowest rounded-xl p-8 shadow-[0px_4px_12px_rgba(0,0,0,0.03)] border border-outline-variant/10 space-y-6">

@@ -1,6 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { createClient } from '@supabase/supabase-js';
 import { allowCors } from '../../../../../utils/cors';
+import { verifyFeatureForOrganization } from '../../../../../utils/planFeatures';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
@@ -59,6 +60,12 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
 
     if (!article) {
       return res.status(404).json({ error: 'Artículo no encontrado.' });
+    }
+
+    // Verify plan features (requires blog/articles feature)
+    const isFeatureActive = await verifyFeatureForOrganization(article.organization_id, 'blog');
+    if (!isFeatureActive) {
+      return res.status(403).json({ error: 'El plan contratado para esta clínica no incluye la funcionalidad de artículos/publicaciones.' });
     }
 
     // Query sibling articles for next/prev navigation

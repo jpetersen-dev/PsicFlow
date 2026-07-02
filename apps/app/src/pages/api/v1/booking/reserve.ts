@@ -35,9 +35,16 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
   try {
     const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
-    // 1. Generate unique transaction identifier (e.g. SM-A3X9R)
+    // 1. Fetch booking prefix dynamically
+    const { data: settings } = await supabase
+      .from('booking_settings')
+      .select('booking_prefix')
+      .eq('organization_id', organization_id)
+      .maybeSingle();
+
+    const prefix = settings?.booking_prefix || 'PF';
     const randomSuffix = Math.random().toString(36).substring(2, 8).toUpperCase();
-    const transactionId = `SM-${randomSuffix}`;
+    const transactionId = `${prefix}-${randomSuffix}`;
 
     const fullName = `${first_name.trim()} ${last_name.trim()}`;
 

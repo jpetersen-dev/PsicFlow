@@ -1,6 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { createClient } from '@supabase/supabase-js';
 import { allowCors } from '../../../../utils/cors';
+import { verifyFeatureForOrganization } from '../../../../utils/planFeatures';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
@@ -19,6 +20,12 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
 
   if (!organization_id || typeof organization_id !== 'string') {
     return res.status(400).json({ error: 'El parámetro organization_id es obligatorio.' });
+  }
+
+  // Verify plan features
+  const isFeatureActive = await verifyFeatureForOrganization(organization_id, 'reviews');
+  if (!isFeatureActive) {
+    return res.status(403).json({ error: 'El plan contratado para esta clínica no incluye la funcionalidad de reseñas.' });
   }
 
   try {

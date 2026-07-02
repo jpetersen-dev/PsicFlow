@@ -27,6 +27,7 @@ import {
 } from 'lucide-react';
 import { supabase } from '../lib/supabaseClient';
 import { NewClinicModal } from './NewClinicModal';
+import { hasFeature } from '../utils/planFeatures';
 
 export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const router = useRouter();
@@ -37,6 +38,8 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [activeTenant, setActiveTenant] = useState('');
   const [organizations, setOrganizations] = useState<any[]>([]);
+  const activeOrg = organizations.find(o => o.id === activeTenant);
+  const activePlan = activeOrg?.current_plan || 'Starter';
   const [isNewClinicOpen, setIsNewClinicOpen] = useState(false);
   const [credits, setCredits] = useState<{ NOTA_IA: number; INFORME_CLINICO: number }>({ NOTA_IA: 0, INFORME_CLINICO: 0 });
   const [profile, setProfile] = useState<{ full_name: string; role_name: string } | null>(null);
@@ -229,7 +232,7 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
     fetchTenantData();
   }, [activeTenant, isNoLayout]);
 
-  // Route protection by role
+  // Route protection by role and plan features
   useEffect(() => {
     if (isNoLayout || !profile) return;
     const isPatientUser = profile.role_name === 'paciente';
@@ -239,8 +242,15 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
       router.push('/portal');
     } else if (!isPatientUser && isPortalRoute) {
       router.push('/dashboard');
+    } else if (!isPatientUser) {
+      // Feature Gating Guard
+      if (router.pathname.startsWith('/resenas') && !hasFeature(activePlan, 'reviews')) {
+        router.push('/dashboard');
+      } else if (router.pathname.startsWith('/publicaciones') && !hasFeature(activePlan, 'blog')) {
+        router.push('/dashboard');
+      }
     }
-  }, [profile, router.pathname, isNoLayout, router]);
+  }, [profile, router.pathname, isNoLayout, router, activePlan]);
 
   const handleTenantChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const newId = e.target.value;
@@ -261,8 +271,8 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
     { name: 'Reportes y Finanzas', href: '/reportes', icon: BarChart3 },
     { name: 'Biblioteca', href: '/biblioteca', icon: BookOpen },
     { name: 'Centro Documentos', href: '/documentos', icon: FileText },
-    { name: 'Reseñas Pacientes', href: '/resenas', icon: Star },
-    { name: 'Publicaciones', href: '/publicaciones', icon: Newspaper },
+    ...(hasFeature(activePlan, 'reviews') ? [{ name: 'Reseñas Pacientes', href: '/resenas', icon: Star }] : []),
+    ...(hasFeature(activePlan, 'blog') ? [{ name: 'Publicaciones', href: '/publicaciones', icon: Newspaper }] : []),
     { name: 'Mi Perfil', href: '/perfil', icon: User }
   ];
 
