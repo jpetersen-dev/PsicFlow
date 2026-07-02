@@ -135,3 +135,8 @@ INSERT INTO public.organization_payment_gateways (
 ) ON CONFLICT (organization_id, provider) DO UPDATE SET
   is_active = EXCLUDED.is_active,
   credentials = EXCLUDED.credentials;
+
+-- 4. Set Sentido Migrante to Enterprise plan
+UPDATE public.organizations
+SET current_plan = 'Enterprise'
+WHERE id = 'fa28bcff-1321-4cb4-b5ef-64ffed1662cb';
