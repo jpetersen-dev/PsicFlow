@@ -23,7 +23,11 @@ import {
   CreditCard,
   Eye,
   EyeOff,
-  Link
+  Link,
+  Clock,
+  DollarSign,
+  Edit,
+  Trash2
 } from 'lucide-react';
 import { supabase } from '../lib/supabaseClient';
 import { hasFeature } from '../utils/planFeatures';
@@ -105,10 +109,22 @@ export default function Perfil() {
 
   // Tab & UI configuration states
   const [activeMainTab, setActiveMainTab] = useState<'profile' | 'booking' | 'integrations' | 'security' | 'clinics'>('profile');
-  const [activeBookingTab, setActiveBookingTab] = useState<'general' | 'gateways'>('general');
+  const [activeBookingTab, setActiveBookingTab] = useState<'general' | 'gateways' | 'services'>('general');
   const [activeWiseTab, setActiveWiseTab] = useState<'chf' | 'eur'>('chf');
   const [showStripeSecret, setShowStripeSecret] = useState(false);
   const [showMpSecret, setShowMpSecret] = useState(false);
+
+  // Services states
+  const [services, setServices] = useState<any[]>([]);
+  const [loadingServices, setLoadingServices] = useState(false);
+  const [editingService, setEditingService] = useState<any>(null);
+  const [serviceTitle, setServiceTitle] = useState('');
+  const [serviceSlug, setServiceSlug] = useState('');
+  const [serviceDuration, setServiceDuration] = useState(50);
+  const [servicePrice, setServicePrice] = useState(0.00);
+  const [serviceCurrency, setServiceCurrency] = useState('CLP');
+  const [serviceActiveStatus, setServiceActiveStatus] = useState(true);
+  const [isSavingService, setIsSavingService] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -640,6 +656,115 @@ export default function Perfil() {
     }
   };
 
+  const fetchServices = useCallback(async () => {
+    const activeTenant = localStorage.getItem('active-tenant-id');
+    if (!activeTenant) return;
+    setLoadingServices(true);
+    try {
+      const { data, error } = await supabase
+        .from('services')
+        .select('*')
+        .eq('organization_id', activeTenant)
+        .order('created_at', { ascending: true });
+      if (error) throw error;
+      setServices(data || []);
+    } catch (err: any) {
+      console.error('Error fetching services:', err);
+    } finally {
+      setLoadingServices(false);
+    }
+  }, []);
+
+  const handleSaveService = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const activeTenant = localStorage.getItem('active-tenant-id');
+    if (!activeTenant) return;
+    if (!serviceTitle || !serviceSlug) {
+      alert('Por favor completa el título y el slug.');
+      return;
+    }
+
+    setIsSavingService(true);
+    try {
+      const payload: any = {
+        organization_id: activeTenant,
+        title: serviceTitle.trim(),
+        id_slug: serviceSlug.trim().toLowerCase().replace(/[^a-z0-9-_]+/g, '-'),
+        duration_minutes: Number(serviceDuration),
+        price: Number(servicePrice),
+        currency: serviceCurrency,
+        is_active: serviceActiveStatus
+      };
+
+      if (editingService && editingService.id) {
+        // Update
+        const { error } = await supabase
+          .from('services')
+          .update(payload)
+          .eq('id', editingService.id);
+        if (error) throw error;
+      } else {
+        // Insert
+        const { error } = await supabase
+          .from('services')
+          .insert(payload);
+        if (error) throw error;
+      }
+
+      alert('Servicio guardado correctamente.');
+      setEditingService(null);
+      // Reset form
+      setServiceTitle('');
+      setServiceSlug('');
+      setServiceDuration(50);
+      setServicePrice(0);
+      setServiceActiveStatus(true);
+
+      await fetchServices();
+    } catch (err: any) {
+      alert('Error al guardar servicio: ' + err.message);
+    } finally {
+      setIsSavingService(false);
+    }
+  };
+
+  const handleEditServiceClick = (srv: any) => {
+    setEditingService(srv);
+    setServiceTitle(srv.title);
+    setServiceSlug(srv.id_slug);
+    setServiceDuration(srv.duration_minutes);
+    setServicePrice(srv.price);
+    setServiceCurrency(srv.currency);
+    setServiceActiveStatus(srv.is_active);
+  };
+
+  const handleNewServiceClick = () => {
+    setEditingService({ id: '' }); // Mark as new
+    setServiceTitle('');
+    setServiceSlug('');
+    setServiceDuration(50);
+    setServicePrice(0);
+    setServiceCurrency(bookingCurrency || 'CLP');
+    setServiceActiveStatus(true);
+  };
+
+  const handleDeleteService = async (srvId: string, srvTitle: string) => {
+    const confirmDel = confirm(`¿Estás seguro de eliminar el servicio "${srvTitle}"?`);
+    if (!confirmDel) return;
+
+    try {
+      const { error } = await supabase
+        .from('services')
+        .delete()
+        .eq('id', srvId);
+      if (error) throw error;
+      alert('Servicio eliminado.');
+      await fetchServices();
+    } catch (err: any) {
+      alert('Error al eliminar servicio: ' + err.message);
+    }
+  };
+
   const handleSwitchClinic = (orgId: string) => {
     localStorage.setItem('active-tenant-id', orgId);
     window.location.reload();
@@ -648,7 +773,8 @@ export default function Perfil() {
   useEffect(() => {
     fetchProfileAndOrg();
     fetchGoogleCalendars();
-  }, []);
+    fetchServices();
+  }, [fetchServices]);
 
   const handleRecharge = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -1199,6 +1325,18 @@ export default function Perfil() {
                     <CreditCard className="w-4 h-4" />
                     <span>Pasarelas y Métodos de Pago</span>
                   </button>
+                  <button
+                    type="button"
+                    onClick={() => setActiveBookingTab('services')}
+                    className={`flex items-center gap-2 px-4 py-3 text-sm font-semibold border-b-2 transition-all cursor-pointer ${
+                      activeBookingTab === 'services'
+                        ? 'border-primary text-primary'
+                        : 'border-transparent text-on-surface-variant hover:text-on-surface hover:border-outline-variant'
+                    }`}
+                  >
+                    <Clock className="w-4 h-4" />
+                    <span>Servicios y Tarifas</span>
+                  </button>
                 </div>
 
                 {/* Tab Content: General Settings */}
@@ -1645,15 +1783,220 @@ export default function Perfil() {
                   </div>
                 )}
 
-                <div className="flex justify-end pt-4 border-t border-outline-variant/15">
-                  <button 
-                    type="submit" 
-                    disabled={submitting}
-                    className="px-6 py-2.5 bg-primary text-on-primary rounded-lg font-label-md shadow-sm hover:bg-primary-container transition-all cursor-pointer disabled:opacity-50 font-semibold"
-                  >
-                    {submitting ? 'Guardando...' : 'Guardar Configuración de Pagos'}
-                  </button>
-                </div>
+                {activeBookingTab === 'services' && (
+                  <div className="space-y-6">
+                    {/* Add service button */}
+                    {!editingService && (
+                      <div className="flex justify-between items-center">
+                        <h4 className="text-sm font-bold text-on-surface">Servicios Registrados ({services.length})</h4>
+                        <button
+                          type="button"
+                          onClick={handleNewServiceClick}
+                          className="px-4 py-2 bg-primary/10 text-primary hover:bg-primary/20 rounded-lg text-xs font-semibold cursor-pointer flex items-center gap-1.5"
+                        >
+                          <Plus className="w-3.5 h-3.5" />
+                          <span>Agregar Servicio</span>
+                        </button>
+                      </div>
+                    )}
+
+                    {/* Editing Form */}
+                    {editingService && (
+                      <div className="bg-surface-container-low border border-outline-variant/20 rounded-xl p-5 space-y-4">
+                        <div className="flex items-center justify-between border-b border-outline-variant/25 pb-3">
+                          <h4 className="text-sm font-bold text-primary">
+                            {editingService.id ? 'Editar Servicio' : 'Nuevo Servicio Clínico'}
+                          </h4>
+                          <button
+                            type="button"
+                            onClick={() => setEditingService(null)}
+                            className="text-xs text-on-surface-variant hover:text-on-surface cursor-pointer"
+                          >
+                            Cancelar
+                          </button>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div className="space-y-1.5">
+                            <label className="text-[11px] font-semibold text-on-surface-variant uppercase tracking-wider">Título del Servicio</label>
+                            <input
+                              type="text"
+                              value={serviceTitle}
+                              onChange={(e) => {
+                                setServiceTitle(e.target.value);
+                                if (!editingService.id) {
+                                  // Auto-generate slug for new services
+                                  setServiceSlug(e.target.value.toLowerCase().trim()
+                                    .replace(/[^a-z0-9\s-]/g, '')
+                                    .replace(/\s+/g, '-'));
+                                }
+                              }}
+                              placeholder="Ej. Psicoterapia Individual"
+                              className="w-full text-sm bg-surface-container-lowest border border-outline-variant/35 rounded-lg px-3.5 py-2.5 text-on-surface focus:outline-none focus:border-primary transition-colors"
+                            />
+                          </div>
+
+                          <div className="space-y-1.5">
+                            <label className="text-[11px] font-semibold text-on-surface-variant uppercase tracking-wider">Slug de Enlace (ID)</label>
+                            <input
+                              type="text"
+                              value={serviceSlug}
+                              onChange={(e) => setServiceSlug(e.target.value)}
+                              placeholder="ej. psicoterapia-individual"
+                              className="w-full text-sm bg-surface-container-lowest border border-outline-variant/35 rounded-lg px-3.5 py-2.5 text-on-surface focus:outline-none focus:border-primary transition-colors"
+                            />
+                          </div>
+
+                          <div className="space-y-1.5">
+                            <label className="text-[11px] font-semibold text-on-surface-variant uppercase tracking-wider">Duración (minutos)</label>
+                            <input
+                              type="number"
+                              value={serviceDuration}
+                              onChange={(e) => setServiceDuration(Number(e.target.value))}
+                              className="w-full text-sm bg-surface-container-lowest border border-outline-variant/35 rounded-lg px-3.5 py-2.5 text-on-surface focus:outline-none focus:border-primary transition-colors"
+                            />
+                          </div>
+
+                          <div className="grid grid-cols-3 gap-2">
+                            <div className="col-span-2 space-y-1.5">
+                              <label className="text-[11px] font-semibold text-on-surface-variant uppercase tracking-wider">Precio</label>
+                              <input
+                                type="number"
+                                step="0.01"
+                                value={servicePrice}
+                                onChange={(e) => setServicePrice(Number(e.target.value))}
+                                className="w-full text-sm bg-surface-container-lowest border border-outline-variant/35 rounded-lg px-3.5 py-2.5 text-on-surface focus:outline-none focus:border-primary transition-colors"
+                              />
+                            </div>
+                            <div className="space-y-1.5">
+                              <label className="text-[11px] font-semibold text-on-surface-variant uppercase tracking-wider">Moneda</label>
+                              <select
+                                value={serviceCurrency}
+                                onChange={(e) => setServiceCurrency(e.target.value)}
+                                className="w-full text-sm bg-surface-container-lowest border border-outline-variant/35 rounded-lg px-2 py-2.5 text-on-surface focus:outline-none focus:border-primary transition-colors"
+                              >
+                                <option value="CLP">CLP</option>
+                                <option value="CHF">CHF</option>
+                                <option value="EUR">EUR</option>
+                                <option value="USD">USD</option>
+                              </select>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-3 pt-2">
+                            <input
+                              type="checkbox"
+                              id="serviceActive"
+                              checked={serviceActiveStatus}
+                              onChange={(e) => setServiceActiveStatus(e.target.checked)}
+                              className="w-4 h-4 text-primary bg-surface-container-lowest border-outline-variant/40 rounded focus:ring-primary focus:ring-2"
+                            />
+                            <label htmlFor="serviceActive" className="text-xs font-semibold text-on-surface cursor-pointer">
+                              Servicio Activo para Reservas Públicas
+                            </label>
+                          </div>
+                        </div>
+
+                        <div className="flex justify-end gap-3 border-t border-outline-variant/15 pt-3 mt-4">
+                          <button
+                            type="button"
+                            onClick={() => setEditingService(null)}
+                            className="px-4 py-2 bg-neutral-100 dark:bg-neutral-800 text-on-surface-variant hover:text-on-surface text-xs font-semibold rounded-lg cursor-pointer transition-all"
+                          >
+                            Cancelar
+                          </button>
+                          <button
+                            type="button"
+                            onClick={handleSaveService}
+                            disabled={isSavingService}
+                            className="px-5 py-2 bg-primary text-on-primary hover:bg-primary-container text-xs font-semibold rounded-lg cursor-pointer transition-all disabled:opacity-50"
+                          >
+                            {isSavingService ? 'Guardando...' : 'Guardar Servicio'}
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Services list */}
+                    {loadingServices ? (
+                      <div className="text-center py-6 text-xs text-on-surface-variant">Cargando catálogo de servicios...</div>
+                    ) : services.length === 0 ? (
+                      <div className="text-center py-10 border border-dashed border-outline-variant/30 rounded-xl space-y-2">
+                        <p className="text-sm font-semibold text-on-surface-variant">No tienes servicios creados.</p>
+                        <p className="text-xs text-on-surface-variant/75">Crea tus servicios para que tus pacientes los seleccionen al agendar.</p>
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {services.map((srv) => (
+                          <div 
+                            key={srv.id} 
+                            className={`p-5 rounded-xl border flex flex-col justify-between transition-all ${
+                              srv.is_active 
+                                ? 'bg-surface-container-lowest border-outline-variant/20 hover:border-outline' 
+                                : 'bg-surface-container-low/40 border-outline-variant/15 opacity-60'
+                            }`}
+                          >
+                            <div>
+                              <div className="flex items-start justify-between gap-2">
+                                <h5 className="font-bold text-sm text-on-surface leading-tight">{srv.title}</h5>
+                                <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                                  srv.is_active 
+                                    ? 'bg-success/10 text-success' 
+                                    : 'bg-neutral-500/10 text-on-surface-variant'
+                                }`}>
+                                  {srv.is_active ? 'Activo' : 'Inactivo'}
+                                </span>
+                              </div>
+                              <p className="text-[11px] text-on-surface-variant font-mono mt-1">Slug: {srv.id_slug}</p>
+                              
+                              <div className="flex items-center gap-4 mt-3 text-xs text-on-surface-variant font-semibold">
+                                <div className="flex items-center gap-1">
+                                  <Clock className="w-3.5 h-3.5" />
+                                  <span>{srv.duration_minutes} min</span>
+                                </div>
+                                <div className="flex items-center gap-1 text-primary">
+                                  <DollarSign className="w-3.5 h-3.5" />
+                                  <span>{srv.price} {srv.currency}</span>
+                                </div>
+                              </div>
+                            </div>
+
+                            <div className="flex justify-end gap-2 border-t border-outline-variant/10 pt-3 mt-4">
+                              <button
+                                type="button"
+                                onClick={() => handleEditServiceClick(srv)}
+                                className="p-1.5 hover:bg-surface-container-high rounded text-on-surface-variant hover:text-primary transition-colors cursor-pointer"
+                                title="Editar"
+                              >
+                                <Edit className="w-4 h-4" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteService(srv.id, srv.title)}
+                                className="p-1.5 hover:bg-error/10 rounded text-on-surface-variant hover:text-error transition-colors cursor-pointer"
+                                title="Eliminar"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {activeBookingTab !== 'services' && (
+                  <div className="flex justify-end pt-4 border-t border-outline-variant/15">
+                    <button 
+                      type="submit" 
+                      disabled={submitting}
+                      className="px-6 py-2.5 bg-primary text-on-primary rounded-lg font-label-md shadow-sm hover:bg-primary-container transition-all cursor-pointer disabled:opacity-50 font-semibold"
+                    >
+                      {submitting ? 'Guardando...' : 'Guardar Configuración de Pagos'}
+                    </button>
+                  </div>
+                )}
               </form>
             </section>
           </div>

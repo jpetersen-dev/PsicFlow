@@ -21,7 +21,7 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  const { organization_id, specialist_id, date, start_time, patient_data } = req.body;
+  const { organization_id, specialist_id, date, start_time, patient_data, service_id } = req.body;
 
   if (!organization_id || !specialist_id || !date || !start_time || !patient_data) {
     return res.status(400).json({ error: 'Faltan parámetros obligatorios en el cuerpo del mensaje.' });
@@ -58,7 +58,8 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
       p_email: email.trim().toLowerCase(),
       p_phone: phone ? phone.trim() : null,
       p_transaction_id: transactionId,
-      p_value: 0.00, // Or configure standard booking price if required
+      p_value: 0.00, // Fallback if no service_id provided
+      p_service_id: service_id || null
     });
 
     if (reserveErr || !reservationList || reservationList.length === 0) {
