@@ -287,10 +287,30 @@ export default function Perfil() {
     alert(`Doble Factor (2FA) ${val ? 'habilitado' : 'deshabilitado'} exitosamente.`);
   };
 
-  const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) {
-      alert(`Foto "${file.name}" cargada correctamente (Simulado). El perfil se actualizará al guardar.`);
+    if (!file || !profile) return;
+    try {
+      const ext = file.name.split('.').pop();
+      const path = `logos-signatures/${profile.id}_logo.${ext}`;
+      const { error: uploadErr } = await supabase.storage
+        .from('clinical-vault')
+        .upload(path, file, { upsert: true });
+      if (uploadErr) throw uploadErr;
+      
+      const { data } = supabase.storage.from('clinical-vault').getPublicUrl(path);
+      const url = data.publicUrl;
+      
+      const { error: updateErr } = await supabase
+        .from('profiles')
+        .update({ logo_url: url })
+        .eq('id', profile.id);
+      if (updateErr) throw updateErr;
+      
+      alert('Foto de perfil subida y actualizada con éxito.');
+      await fetchProfileAndOrg();
+    } catch (err: any) {
+      alert('Error al subir la foto de perfil: ' + err.message);
     }
   };
 
@@ -963,8 +983,14 @@ export default function Perfil() {
                     accept="image/*" 
                     className="hidden" 
                   />
-                  <div className="w-32 h-32 rounded-full bg-primary/10 text-primary flex items-center justify-center font-bold text-4xl border-4 border-surface-container shadow-sm">
-                    {profile ? profile.full_name[0].toUpperCase() : 'T'}
+                  <div className="w-32 h-32 rounded-full border-4 border-surface-container shadow-sm overflow-hidden flex items-center justify-center bg-primary/10 text-primary">
+                    {profile?.logo_url ? (
+                      <img src={profile.logo_url} alt="Foto de perfil" className="w-full h-full object-cover" />
+                    ) : (
+                      <span className="font-bold text-4xl">
+                        {profile ? profile.full_name[0].toUpperCase() : 'T'}
+                      </span>
+                    )}
                   </div>
                   <button 
                     onClick={() => fileInputRef.current?.click()}
