@@ -27,7 +27,10 @@ import {
   Clock,
   DollarSign,
   Edit,
-  Trash2
+  Trash2,
+  MapPin,
+  X,
+  Sparkles
 } from 'lucide-react';
 import { supabase } from '../lib/supabaseClient';
 import { hasFeature } from '../utils/planFeatures';
@@ -97,6 +100,7 @@ export default function Perfil() {
   const [notifyInquiries, setNotifyInquiries] = useState(true);
   const [notifyReminders, setNotifyReminders] = useState(true);
   const [tfaEnabled, setTfaEnabled] = useState(true);
+  const [isPreviewOpen, setIsPreviewOpen] = useState(false);
 
   // Google Calendar integration states
   const [googleConnected, setGoogleConnected] = useState(false);
@@ -315,7 +319,7 @@ export default function Perfil() {
   };
 
   const handlePreviewProfile = () => {
-    alert(`[Previsualización Pública]\n\nNombre: ${profile?.full_name || 'Terapeuta'}\nEspecialidad: ${specialization}\nExperiencia: ${experience} años\nBiografía: ${bio}`);
+    setIsPreviewOpen(true);
   };
 
   const handleChangePassword = async () => {
@@ -1008,19 +1012,21 @@ export default function Perfil() {
                 <p className="font-body-md text-on-surface-variant mb-6 text-sm">
                   RUT: {profile ? profile.rut_professional : 'N/A'}
                 </p>
+                {profile?.logo_url && profile.logo_url.includes('googleusercontent.com') ? (
+                  <p className="text-[10px] text-amber-500 font-medium leading-relaxed max-w-xs mb-4">
+                    ⚠️ Usando foto de tu cuenta de Google por defecto. Haz clic en la cámara para subir una fotografía oficial.
+                  </p>
+                ) : (
+                  <p className="text-[10px] text-on-surface-variant/75 leading-relaxed max-w-xs mb-4">
+                    Se recomienda una fotografía oficial (con fondo neutro y buena iluminación) para el portal público.
+                  </p>
+                )}
               </div>
 
               <div className="w-full space-y-4 border-t border-outline-variant/20 pt-6">
                 <button 
-                  onClick={() => fileInputRef.current?.click()}
-                  className="w-full py-2.5 bg-primary text-on-primary rounded-lg font-label-md hover:bg-primary-container transition-all cursor-pointer font-semibold"
-                  type="button"
-                >
-                  Subir Nueva Foto
-                </button>
-                <button 
                   onClick={handlePreviewProfile}
-                  className="w-full py-2.5 bg-transparent text-primary border border-primary/20 rounded-lg font-label-md hover:bg-primary/5 transition-all cursor-pointer font-semibold"
+                  className="w-full py-2.5 bg-primary text-on-primary rounded-lg font-label-md hover:bg-primary-container transition-all cursor-pointer font-semibold shadow-sm"
                   type="button"
                 >
                   Previsualizar Perfil Público
@@ -1214,57 +1220,6 @@ export default function Perfil() {
                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div className="space-y-2">
-                      <label className="font-label-md text-on-surface-variant text-xs font-semibold block">Foto de Perfil / Logo Profesional</label>
-                      <div className="flex items-center gap-4">
-                        {profile?.logo_url ? (
-                          <img src={profile.logo_url} alt="Foto de perfil / Logo" className="w-16 h-16 object-cover border border-outline-variant/20 rounded bg-white p-0.5" />
-                        ) : (
-                          <div className="w-16 h-16 bg-surface-container-low border border-outline-variant/20 rounded flex items-center justify-center text-[10px] text-on-surface-variant text-center">Sin Foto</div>
-                        )}
-                        <input 
-                          type="file" 
-                          accept="image/*"
-                          onChange={async (e) => {
-                            const file = e.target.files?.[0];
-                            if (!file) return;
-                            try {
-                              const ext = file.name.split('.').pop();
-                              const path = `logos-signatures/${profile.id}_logo.${ext}`;
-                              const { error: uploadErr } = await supabase.storage
-                                .from('clinical-vault')
-                                .upload(path, file, { upsert: true });
-                              if (uploadErr) throw uploadErr;
-                              
-                              const { data } = supabase.storage.from('clinical-vault').getPublicUrl(path);
-                              const url = data.publicUrl;
-                              
-                              const { error: updateErr } = await supabase
-                                .from('profiles')
-                                .update({ logo_url: url })
-                                .eq('id', profile.id);
-                              if (updateErr) throw updateErr;
-                              
-                              alert('Foto de perfil subida y actualizada con éxito.');
-                              await fetchProfileAndOrg();
-                            } catch (err: any) {
-                              alert('Error al subir la foto de perfil: ' + err.message);
-                            }
-                          }}
-                          className="text-xs text-on-surface-variant file:mr-4 file:py-1.5 file:px-3 file:rounded-md file:border-0 file:text-xs file:font-semibold file:bg-primary/10 file:text-primary hover:file:bg-primary/20"
-                        />
-                      </div>
-                      {profile?.logo_url && profile.logo_url.includes('googleusercontent.com') ? (
-                        <p className="text-[10px] text-amber-500 font-medium leading-relaxed max-w-sm mt-1">
-                          ⚠️ Usando foto de tu cuenta de Google por defecto. Se recomienda subir una fotografía oficial del especialista.
-                        </p>
-                      ) : (
-                        <p className="text-[10px] text-text-secondary leading-relaxed max-w-sm mt-1">
-                          Se recomienda subir una fotografía oficial del especialista (con fondo neutro y buena iluminación) para el portal público.
-                        </p>
-                      )}
-                    </div>
-
                     <div className="space-y-2">
                       <label className="font-label-md text-on-surface-variant text-xs font-semibold block">Firma Digital del Terapeuta</label>
                       <div className="flex items-center gap-4">
@@ -2507,6 +2462,124 @@ export default function Perfil() {
           <p>© 2026 PsicFlow Ecosistema de Gestión y Blindaje Psicológico. Encriptación de datos AES-256 e HIPAA Compliant.</p>
         </footer>
       </div>
+
+      {/* Modal de Previsualización de Perfil */}
+      {isPreviewOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm transition-all duration-300">
+          <div className="bg-surface-container-lowest border border-outline-variant/20 rounded-3xl p-6 sm:p-8 max-w-2xl w-full shadow-2xl relative max-h-[90vh] overflow-y-auto text-on-surface flex flex-col gap-6 transition-all duration-300">
+            
+            {/* Header */}
+            <div className="flex justify-between items-center border-b border-outline-variant/10 pb-4">
+              <div className="flex items-center gap-2">
+                <Sparkles className="w-5 h-5 text-primary" />
+                <h3 className="text-xl font-bold font-display text-on-surface">Vista Previa de tu Perfil Público</h3>
+              </div>
+              <button 
+                onClick={() => setIsPreviewOpen(false)}
+                className="p-1 rounded-full hover:bg-surface-container-high transition-colors text-on-surface-variant hover:text-on-surface cursor-pointer"
+                type="button"
+              >
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+
+            {/* Card Preview Container (Sentido Migrante style card) */}
+            <div className="bg-surface-container-low p-6 rounded-2xl border border-outline-variant/10 flex flex-col sm:flex-row items-center sm:items-start gap-6">
+              
+              {/* Photo */}
+              <div className="w-28 h-28 rounded-2xl bg-primary/10 overflow-hidden shrink-0 border border-outline-variant/20 shadow-inner flex items-center justify-center">
+                {profile?.logo_url ? (
+                  <img src={profile.logo_url} alt="Foto de perfil" className="w-full h-full object-cover" />
+                ) : (
+                  <span className="font-bold text-4xl text-primary">{fullName[0]?.toUpperCase() || 'T'}</span>
+                )}
+              </div>
+              
+              {/* Details */}
+              <div className="flex flex-col text-center sm:text-left justify-center min-w-0 flex-1">
+                <h4 className="font-bold text-xl text-on-surface font-display">{fullName || 'Terapeuta'}</h4>
+                <p className="text-xs text-primary font-bold uppercase tracking-wider mt-1">{specialization || 'Psicólogo Clínico y Psicoterapeuta'}</p>
+                
+                {experience > 0 && (
+                  <p className="text-xs text-on-surface-variant font-medium mt-1">
+                    {experience} {experience === 1 ? 'año' : 'años'} de experiencia clínica
+                  </p>
+                )}
+
+                {location && (
+                  <div className="flex items-center justify-center sm:justify-start gap-1 text-[11px] text-on-surface-variant mt-2 font-medium">
+                    <MapPin size={12} className="text-primary" />
+                    <span className="truncate">{location}</span>
+                  </div>
+                )}
+
+                {bio && (
+                  <p className="text-xs text-on-surface-variant font-light mt-3 leading-relaxed border-t border-outline-variant/10 pt-3">
+                    {bio}
+                  </p>
+                )}
+              </div>
+            </div>
+
+            {/* Expanded details grid (Quote, specialties, education, languages) */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+              {quote && (
+                <div className="col-span-2 p-4 bg-primary/5 border border-primary/10 rounded-xl italic text-on-surface-variant text-center leading-relaxed">
+                  "{quote}"
+                </div>
+              )}
+
+              {/* Specialties */}
+              <div className="space-y-1.5 bg-surface-container-low p-4 rounded-xl border border-outline-variant/10">
+                <h5 className="font-bold text-primary">Especialidades:</h5>
+                {specialtiesText ? (
+                  <ul className="list-disc list-inside space-y-0.5 text-on-surface-variant pl-1">
+                    {specialtiesText.split('\n').filter(Boolean).map((spec, idx) => (
+                      <li key={idx} className="leading-snug">{spec.trim()}</li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="text-on-surface-variant/65 italic">Sin especialidades configuradas</p>
+                )}
+              </div>
+
+              {/* Education */}
+              <div className="space-y-1.5 bg-surface-container-low p-4 rounded-xl border border-outline-variant/10">
+                <h5 className="font-bold text-primary">Educación y Formación:</h5>
+                {educationText ? (
+                  <ul className="list-disc list-inside space-y-0.5 text-on-surface-variant pl-1">
+                    {educationText.split('\n').filter(Boolean).map((edu, idx) => (
+                      <li key={idx} className="leading-snug">{edu.trim()}</li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="text-on-surface-variant/65 italic">Sin educación registrada</p>
+                )}
+              </div>
+
+              {/* Languages */}
+              {languagesText && (
+                <div className="col-span-2 space-y-1 bg-surface-container-low p-4 rounded-xl border border-outline-variant/10">
+                  <span className="font-bold text-primary">Idiomas de Atención: </span>
+                  <span className="text-on-surface-variant">{languagesText.split('\n').filter(Boolean).join(', ')}</span>
+                </div>
+              )}
+            </div>
+
+            {/* Actions */}
+            <div className="flex justify-end gap-3 border-t border-outline-variant/10 pt-4 mt-2">
+              <button 
+                onClick={() => setIsPreviewOpen(false)}
+                className="px-5 py-2 bg-primary text-on-primary hover:bg-primary-container text-sm font-semibold rounded-xl transition-colors cursor-pointer"
+                type="button"
+              >
+                Cerrar Vista Previa
+              </button>
+            </div>
+
+          </div>
+        </div>
+      )}
     </>
   );
 }
