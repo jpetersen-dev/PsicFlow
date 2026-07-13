@@ -341,6 +341,20 @@ export default function Perfil() {
       if (profError) {
         console.error('Error fetching profile:', profError);
       } else if (profData) {
+        // Si no tiene foto de perfil, pero inició con Google y tiene avatar de Google, lo usamos por defecto
+        let finalLogoUrl = profData.logo_url;
+        const googleAvatar = session.user.user_metadata?.avatar_url || session.user.user_metadata?.picture;
+        if (!finalLogoUrl && googleAvatar) {
+          finalLogoUrl = googleAvatar;
+          profData.logo_url = googleAvatar;
+          
+          // Guardar el avatar de Google en el perfil en segundo plano
+          await supabase
+            .from('profiles')
+            .update({ logo_url: googleAvatar })
+            .eq('id', profData.id);
+        }
+
         setProfile(profData);
         setFullName(profData.full_name || '');
         setUsername(profData.username || '');
@@ -1175,12 +1189,12 @@ export default function Perfil() {
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div className="space-y-2">
-                      <label className="font-label-md text-on-surface-variant text-xs font-semibold block">Logo de la Clínica</label>
+                      <label className="font-label-md text-on-surface-variant text-xs font-semibold block">Foto de Perfil / Logo Profesional</label>
                       <div className="flex items-center gap-4">
                         {profile?.logo_url ? (
-                          <img src={profile.logo_url} alt="Logo" className="w-16 h-16 object-contain border border-outline-variant/20 rounded bg-white p-1" />
+                          <img src={profile.logo_url} alt="Foto de perfil / Logo" className="w-16 h-16 object-cover border border-outline-variant/20 rounded bg-white p-0.5" />
                         ) : (
-                          <div className="w-16 h-16 bg-surface-container-low border border-outline-variant/20 rounded flex items-center justify-center text-[10px] text-on-surface-variant">Sin Logo</div>
+                          <div className="w-16 h-16 bg-surface-container-low border border-outline-variant/20 rounded flex items-center justify-center text-[10px] text-on-surface-variant text-center">Sin Foto</div>
                         )}
                         <input 
                           type="file" 
@@ -1205,15 +1219,24 @@ export default function Perfil() {
                                 .eq('id', profile.id);
                               if (updateErr) throw updateErr;
                               
-                              alert('Logo clínico subido y actualizado con éxito.');
+                              alert('Foto de perfil subida y actualizada con éxito.');
                               await fetchProfileAndOrg();
                             } catch (err: any) {
-                              alert('Error al subir logo: ' + err.message);
+                              alert('Error al subir la foto de perfil: ' + err.message);
                             }
                           }}
                           className="text-xs text-on-surface-variant file:mr-4 file:py-1.5 file:px-3 file:rounded-md file:border-0 file:text-xs file:font-semibold file:bg-primary/10 file:text-primary hover:file:bg-primary/20"
                         />
                       </div>
+                      {profile?.logo_url && profile.logo_url.includes('googleusercontent.com') ? (
+                        <p className="text-[10px] text-amber-500 font-medium leading-relaxed max-w-sm mt-1">
+                          ⚠️ Usando foto de tu cuenta de Google por defecto. Se recomienda subir una fotografía oficial del especialista.
+                        </p>
+                      ) : (
+                        <p className="text-[10px] text-text-secondary leading-relaxed max-w-sm mt-1">
+                          Se recomienda subir una fotografía oficial del especialista (con fondo neutro y buena iluminación) para el portal público.
+                        </p>
+                      )}
                     </div>
 
                     <div className="space-y-2">
