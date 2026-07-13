@@ -449,23 +449,38 @@ export default function Perfil() {
       const originalPath = `${profile.user_id}/${profile.id}_original.${ext}`;
       const croppedPath = `${profile.user_id}/${profile.id}_logo.jpg`;
       
-      // Upload original file
+      // 1. Limpiar todos los archivos anteriores del usuario para evitar acumulación
+      try {
+        const { data: files } = await supabase.storage
+          .from('avatars')
+          .list(profile.user_id);
+          
+        if (files && files.length > 0) {
+          const pathsToRemove = files.map(file => `${profile.user_id}/${file.name}`);
+          await supabase.storage.from('avatars').remove(pathsToRemove);
+        }
+      } catch (cleanErr) {
+        console.warn('Error al limpiar archivos antiguos del storage:', cleanErr);
+      }
+      
+      // 2. Subir nuevo archivo original
       const { error: originalErr } = await supabase.storage
         .from('avatars')
         .upload(originalPath, cropFile, { upsert: true });
       if (originalErr) throw originalErr;
       
-      // Upload cropped file
+      // 3. Subir nuevo archivo recortado
       const { error: croppedErr } = await supabase.storage
         .from('avatars')
         .upload(croppedPath, croppedFile, { upsert: true });
       if (croppedErr) throw croppedErr;
       
-      // Get public URLs
-      const originalUrl = supabase.storage.from('avatars').getPublicUrl(originalPath).data.publicUrl;
-      const croppedUrl = supabase.storage.from('avatars').getPublicUrl(croppedPath).data.publicUrl;
+      // 4. Obtener URLs públicas con cache-busting (?t=timestamp)
+      const timestamp = Date.now();
+      const originalUrl = supabase.storage.from('avatars').getPublicUrl(originalPath).data.publicUrl + `?t=${timestamp}`;
+      const croppedUrl = supabase.storage.from('avatars').getPublicUrl(croppedPath).data.publicUrl + `?t=${timestamp}`;
       
-      // Update database profile
+      // 5. Actualizar base de datos
       const { error: dbErr } = await supabase
         .from('profiles')
         .update({ 
