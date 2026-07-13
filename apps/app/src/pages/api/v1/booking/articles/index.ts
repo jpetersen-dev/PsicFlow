@@ -16,8 +16,92 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  const { organization_id } = req.query;
+  const { organization_id, slug } = req.query;
 
+  // 1. If slug parameter is provided, return details for a single article (detail mode)
+  if (slug && typeof slug === 'string') {
+    try {
+      const supabase = createClient(supabaseUrl, supabaseAnonKey);
+
+      // Query the article by slug
+      const { data: article, error } = await supabase
+        .from('articles')
+        .select(`
+          id,
+          organization_id,
+          title,
+          slug,
+          description,
+          content_html,
+          category,
+          tags,
+          image_url,
+          reading_time,
+          published_at,
+          created_at,
+          author:author_id (
+            id,
+            full_name,
+            specialization,
+            bio,
+            logo_url
+          )
+        `)
+        .eq('slug', slug)
+        .eq('status', 'published')
+        .maybeSingle();
+
+      if (error) {
+        console.error('Error fetching article by slug:', error);
+        return res.status(500).json({ error: 'Error al recuperar el artículo.' });
+      }
+
+      if (!article) {
+        return res.status(404).json({ error: 'Artículo no encontrado.' });
+      }
+
+      // Verify plan features (requires blog/articles feature)
+      const isFeatureActive = await verifyFeatureForOrganization(article.organization_id, 'blog');
+      if (!isFeatureActive) {
+        return res.status(403).json({ error: 'El plan contratado para esta clínica no incluye la funcionalidad de artículos/publicaciones.' });
+      }
+
+      // Query sibling articles for next/prev navigation
+      // 1. Previous: published_at < current_article.published_at order by DESC (newest first of the older articles)
+      const { data: prevData } = await supabase
+        .from('articles')
+        .select('title, slug, image_url, category')
+        .eq('status', 'published')
+        .eq('organization_id', article.organization_id)
+        .lt('published_at', article.published_at)
+        .order('published_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      // 2. Next: published_at > current_article.published_at order by ASC (oldest first of the newer articles)
+      const { data: nextData } = await supabase
+        .from('articles')
+        .select('title, slug, image_url, category')
+        .eq('status', 'published')
+        .eq('organization_id', article.organization_id)
+        .gt('published_at', article.published_at)
+        .order('published_at', { ascending: true })
+        .limit(1)
+        .maybeSingle();
+
+      return res.status(200).json({
+        success: true,
+        article,
+        previous: prevData || null,
+        next: nextData || null,
+      });
+    } catch (err: any) {
+      console.error('Unexpected error in article slug API:', err);
+      return res.status(500).json({ error: 'Error interno del servidor.' });
+    }
+  }
+
+  // 2. Otherwise, return the list of articles (list mode)
   if (!organization_id || typeof organization_id !== 'string') {
     return res.status(400).json({ error: 'El parámetro organization_id es obligatorio.' });
   }

@@ -19,6 +19,15 @@ const nextConfig: NextConfig = {
       },
     ],
   },
+  async rewrites() {
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3001';
+    return [
+      {
+        source: '/api/v1/booking/:path*',
+        destination: `${appUrl}/api/v1/booking/:path*`,
+      },
+    ];
+  },
 };
 
 export default nextConfig;
