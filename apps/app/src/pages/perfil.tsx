@@ -102,6 +102,20 @@ export default function Perfil() {
   const [tfaEnabled, setTfaEnabled] = useState(true);
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
 
+  // Cropping photo states
+  const [cropImageSrc, setCropImageSrc] = useState<string>('');
+  const [cropFile, setCropFile] = useState<File | null>(null);
+  const [isCropModalOpen, setIsCropModalOpen] = useState(false);
+  const [savingCrop, setSavingCrop] = useState(false);
+  const [zoom, setZoom] = useState(1);
+  const [offsetX, setOffsetX] = useState(0);
+  const [offsetY, setOffsetY] = useState(0);
+  const [isDragging, setIsDragging] = useState(false);
+  const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
+  const [dragStartOffset, setDragStartOffset] = useState({ x: 0, y: 0 });
+  const [baseWidth, setBaseWidth] = useState(280);
+  const [baseHeight, setBaseHeight] = useState(280);
+
   // Google Calendar integration states
   const [googleConnected, setGoogleConnected] = useState(false);
   const [googleEmail, setGoogleEmail] = useState('');
@@ -291,30 +305,184 @@ export default function Perfil() {
     alert(`Doble Factor (2FA) ${val ? 'habilitado' : 'deshabilitado'} exitosamente.`);
   };
 
-  const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (!file || !profile) return;
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = () => {
+        setCropImageSrc(reader.result as string);
+        setCropFile(file);
+        setIsCropModalOpen(true);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleImageLoad = (e: React.SyntheticEvent<HTMLImageElement>) => {
+    const img = e.currentTarget;
+    const naturalWidth = img.naturalWidth;
+    const naturalHeight = img.naturalHeight;
+    
+    let w = 280;
+    let h = 280;
+    
+    if (naturalWidth > naturalHeight) {
+      h = 280;
+      w = 280 * (naturalWidth / naturalHeight);
+    } else {
+      w = 280;
+      h = 280 * (naturalHeight / naturalWidth);
+    }
+    
+    setBaseWidth(w);
+    setBaseHeight(h);
+    setZoom(1.0);
+    setOffsetX(0);
+    setOffsetY(0);
+  };
+
+  const handleMouseDown = (e: React.MouseEvent) => {
+    e.preventDefault();
+    setIsDragging(true);
+    setDragStart({ x: e.clientX, y: e.clientY });
+    setDragStartOffset({ x: offsetX, y: offsetY });
+  };
+
+  const handleMouseMove = (e: React.MouseEvent) => {
+    if (!isDragging) return;
+    const dx = e.clientX - dragStart.x;
+    const dy = e.clientY - dragStart.y;
+    
+    let newX = dragStartOffset.x + dx;
+    let newY = dragStartOffset.y + dy;
+    
+    const maxOfsX = Math.max(0, (baseWidth * zoom) / 2 - 140);
+    const maxOfsY = Math.max(0, (baseHeight * zoom) / 2 - 140);
+    
+    newX = Math.max(-maxOfsX, Math.min(maxOfsX, newX));
+    newY = Math.max(-maxOfsY, Math.min(maxOfsY, newY));
+    
+    setOffsetX(newX);
+    setOffsetY(newY);
+  };
+
+  const handleMouseUp = () => {
+    setIsDragging(false);
+  };
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    if (e.touches.length !== 1) return;
+    setIsDragging(true);
+    setDragStart({ x: e.touches[0].clientX, y: e.touches[0].clientY });
+    setDragStartOffset({ x: offsetX, y: offsetY });
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (!isDragging || e.touches.length !== 1) return;
+    const dx = e.touches[0].clientX - dragStart.x;
+    const dy = e.touches[0].clientY - dragStart.y;
+    
+    let newX = dragStartOffset.x + dx;
+    let newY = dragStartOffset.y + dy;
+    
+    const maxOfsX = Math.max(0, (baseWidth * zoom) / 2 - 140);
+    const maxOfsY = Math.max(0, (baseHeight * zoom) / 2 - 140);
+    
+    newX = Math.max(-maxOfsX, Math.min(maxOfsX, newX));
+    newY = Math.max(-maxOfsY, Math.min(maxOfsY, newY));
+    
+    setOffsetX(newX);
+    setOffsetY(newY);
+  };
+
+  const handleTouchEnd = () => {
+    setIsDragging(false);
+  };
+
+  const handleCropAndSave = async () => {
+    if (!cropFile || !profile || !cropImageSrc) return;
+    setSavingCrop(true);
     try {
-      const ext = file.name.split('.').pop();
-      const path = `logos-signatures/${profile.id}_logo.${ext}`;
-      const { error: uploadErr } = await supabase.storage
-        .from('clinical-vault')
-        .upload(path, file, { upsert: true });
-      if (uploadErr) throw uploadErr;
+      const img = new Image();
+      img.src = cropImageSrc;
+      await new Promise((resolve) => {
+        img.onload = resolve;
+      });
       
-      const { data } = supabase.storage.from('clinical-vault').getPublicUrl(path);
-      const url = data.publicUrl;
+      const displayedWidth = baseWidth * zoom;
+      const displayedHeight = baseHeight * zoom;
       
-      const { error: updateErr } = await supabase
+      const zoomedX = 140 - displayedWidth / 2;
+      const zoomedY = 140 - displayedHeight / 2;
+      
+      const xInViewport = zoomedX + offsetX;
+      const yInViewport = zoomedY + offsetY;
+      
+      const cropXInImage = -xInViewport;
+      const cropYInImage = -yInViewport;
+      
+      const scaleFactor = img.naturalWidth / displayedWidth;
+      
+      const sourceX = cropXInImage * scaleFactor;
+      const sourceY = cropYInImage * scaleFactor;
+      const sourceWidth = 280 * scaleFactor;
+      const sourceHeight = 280 * scaleFactor;
+      
+      const canvas = document.createElement('canvas');
+      canvas.width = 400;
+      canvas.height = 400;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) throw new Error('No se pudo crear el contexto del canvas.');
+      
+      ctx.drawImage(img, sourceX, sourceY, sourceWidth, sourceHeight, 0, 0, 400, 400);
+      
+      // Optimize image: convert to compressed JPEG (85% quality)
+      const croppedBlob = await new Promise<Blob | null>((resolve) => {
+        canvas.toBlob((blob) => resolve(blob), 'image/jpeg', 0.85);
+      });
+      
+      if (!croppedBlob) throw new Error('Error al generar la imagen recortada.');
+      
+      const croppedFile = new File([croppedBlob], `logo_${profile.id}.jpg`, { type: 'image/jpeg' });
+      
+      const ext = cropFile.name.split('.').pop() || 'jpg';
+      const originalPath = `${profile.user_id}/${profile.id}_original.${ext}`;
+      const croppedPath = `${profile.user_id}/${profile.id}_logo.jpg`;
+      
+      // Upload original file
+      const { error: originalErr } = await supabase.storage
+        .from('avatars')
+        .upload(originalPath, cropFile, { upsert: true });
+      if (originalErr) throw originalErr;
+      
+      // Upload cropped file
+      const { error: croppedErr } = await supabase.storage
+        .from('avatars')
+        .upload(croppedPath, croppedFile, { upsert: true });
+      if (croppedErr) throw croppedErr;
+      
+      // Get public URLs
+      const originalUrl = supabase.storage.from('avatars').getPublicUrl(originalPath).data.publicUrl;
+      const croppedUrl = supabase.storage.from('avatars').getPublicUrl(croppedPath).data.publicUrl;
+      
+      // Update database profile
+      const { error: dbErr } = await supabase
         .from('profiles')
-        .update({ logo_url: url })
+        .update({ 
+          logo_url: croppedUrl,
+          original_logo_url: originalUrl
+        })
         .eq('id', profile.id);
-      if (updateErr) throw updateErr;
+        
+      if (dbErr) throw dbErr;
       
-      alert('Foto de perfil subida y actualizada con éxito.');
+      alert('Foto de perfil recortada y actualizada con éxito.');
+      setIsCropModalOpen(false);
       await fetchProfileAndOrg();
     } catch (err: any) {
-      alert('Error al subir la foto de perfil: ' + err.message);
+      alert('Error al guardar la foto: ' + err.message);
+    } finally {
+      setSavingCrop(false);
     }
   };
 
@@ -983,7 +1151,7 @@ export default function Perfil() {
                   <input 
                     type="file" 
                     ref={fileInputRef} 
-                    onChange={handlePhotoUpload} 
+                    onChange={handleFileSelect} 
                     accept="image/*" 
                     className="hidden" 
                   />
@@ -1236,7 +1404,8 @@ export default function Perfil() {
                             if (!file) return;
                             try {
                               const ext = file.name.split('.').pop();
-                              const path = `logos-signatures/${profile.id}_signature.${ext}`;
+                              const activeTenant = localStorage.getItem('active-tenant-id');
+                              const path = `${activeTenant}/signatures/${profile.id}_signature.${ext}`;
                               const { error: uploadErr } = await supabase.storage
                                 .from('clinical-vault')
                                 .upload(path, file, { upsert: true });
@@ -2574,6 +2743,115 @@ export default function Perfil() {
                 type="button"
               >
                 Cerrar Vista Previa
+              </button>
+            </div>
+
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Recorte de Foto de Perfil */}
+      {isCropModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm transition-all duration-300">
+          <div className="bg-surface-container-lowest border border-outline-variant/20 rounded-3xl p-6 sm:p-8 max-w-md w-full shadow-2xl relative flex flex-col items-center gap-6 transition-all duration-300">
+            
+            {/* Header */}
+            <div className="w-full flex justify-between items-center border-b border-outline-variant/10 pb-4">
+              <h3 className="text-lg font-bold font-display text-on-surface">Ajustar Foto de Perfil</h3>
+              <button 
+                onClick={() => setIsCropModalOpen(false)}
+                className="p-1 rounded-full hover:bg-surface-container-high transition-colors text-on-surface-variant hover:text-on-surface cursor-pointer"
+                type="button"
+                disabled={savingCrop}
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Instruction */}
+            <p className="text-xs text-on-surface-variant text-center max-w-xs leading-relaxed">
+              Arrastra la imagen para encuadrar tu rostro dentro del círculo y usa la barra de zoom inferior para ajustar el tamaño.
+            </p>
+
+            {/* Viewport Frame */}
+            <div className="w-[280px] h-[280px] rounded-full overflow-hidden border-4 border-primary/20 shadow-md relative bg-surface-container-low select-none">
+              <img 
+                src={cropImageSrc} 
+                onLoad={handleImageLoad}
+                onMouseDown={handleMouseDown}
+                onMouseMove={handleMouseMove}
+                onMouseUp={handleMouseUp}
+                onMouseLeave={handleMouseUp}
+                onTouchStart={handleTouchStart}
+                onTouchMove={handleTouchMove}
+                onTouchEnd={handleTouchEnd}
+                style={{
+                  transform: `translate(${offsetX}px, ${offsetY}px) scale(${zoom})`,
+                  transformOrigin: 'center center',
+                  cursor: isDragging ? 'grabbing' : 'grab',
+                  maxWidth: 'none',
+                  maxHeight: 'none',
+                  width: `${baseWidth}px`,
+                  height: `${baseHeight}px`,
+                  position: 'absolute',
+                  top: '0',
+                  left: '0',
+                }}
+                alt="Original a recortar"
+                draggable={false}
+              />
+            </div>
+
+            {/* Zoom Control Slider */}
+            <div className="w-full space-y-2">
+              <div className="flex justify-between items-center text-[11px] text-on-surface-variant font-medium">
+                <span>Zoom</span>
+                <span>{Math.round(zoom * 100)}%</span>
+              </div>
+              <input 
+                type="range"
+                min="1.0"
+                max="3.0"
+                step="0.01"
+                value={zoom}
+                onChange={(e) => {
+                  const newZoom = Number(e.target.value);
+                  setZoom(newZoom);
+                  
+                  // Re-clamp offsets immediately based on new zoom
+                  const maxOfsX = Math.max(0, (baseWidth * newZoom) / 2 - 140);
+                  const maxOfsY = Math.max(0, (baseHeight * newZoom) / 2 - 140);
+                  setOffsetX((prev) => Math.max(-maxOfsX, Math.min(maxOfsX, prev)));
+                  setOffsetY((prev) => Math.max(-maxOfsY, Math.min(maxOfsY, prev)));
+                }}
+                className="w-full accent-primary h-1 bg-outline-variant/35 rounded-lg appearance-none cursor-pointer"
+              />
+            </div>
+
+            {/* Modal Actions */}
+            <div className="w-full flex gap-3 border-t border-outline-variant/10 pt-4 mt-2">
+              <button
+                onClick={() => setIsCropModalOpen(false)}
+                className="flex-1 py-2.5 bg-surface-container-high hover:bg-surface-container-highest text-on-surface text-sm font-semibold rounded-xl transition-colors cursor-pointer"
+                type="button"
+                disabled={savingCrop}
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleCropAndSave}
+                className="flex-1 py-2.5 bg-primary hover:bg-primary-container text-on-primary text-sm font-semibold rounded-xl transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                type="button"
+                disabled={savingCrop}
+              >
+                {savingCrop ? (
+                  <>
+                    <RefreshCw className="w-4 h-4 animate-spin" />
+                    <span>Guardando...</span>
+                  </>
+                ) : (
+                  <span>Recortar y Guardar</span>
+                )}
               </button>
             </div>
 
