@@ -145,6 +145,7 @@ export default function Perfil() {
   const [isSavingService, setIsSavingService] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const imgRef = useRef<HTMLImageElement>(null);
 
   const showBookingTab = hasFeature(organization?.current_plan, 'booking') && profile?.role_name === 'admin_clinica';
 
@@ -397,6 +398,57 @@ export default function Perfil() {
 
   const handleTouchEnd = () => {
     setIsDragging(false);
+  };
+
+  // Wheel zoom effect
+  useEffect(() => {
+    const imgEl = imgRef.current;
+    if (!imgEl) return;
+    
+    const onWheelEvent = (e: WheelEvent) => {
+      e.preventDefault();
+      const zoomFactor = 0.08;
+      const isZoomIn = e.deltaY < 0;
+      setZoom((prevZoom) => {
+        let newZoom = prevZoom + (isZoomIn ? zoomFactor : -zoomFactor);
+        newZoom = Math.max(1.0, Math.min(3.0, newZoom));
+        return newZoom;
+      });
+    };
+    
+    imgEl.addEventListener('wheel', onWheelEvent, { passive: false });
+    return () => {
+      imgEl.removeEventListener('wheel', onWheelEvent);
+    };
+  }, [baseWidth, baseHeight, isCropModalOpen]);
+
+  // Clamp offsets automatically on zoom changes
+  useEffect(() => {
+    if (!isCropModalOpen) return;
+    const maxOfsX = Math.max(0, (baseWidth * zoom) / 2 - 140);
+    const maxOfsY = Math.max(0, (baseHeight * zoom) / 2 - 140);
+    setOffsetX((prev) => Math.max(-maxOfsX, Math.min(maxOfsX, prev)));
+    setOffsetY((prev) => Math.max(-maxOfsY, Math.min(maxOfsY, prev)));
+  }, [zoom, baseWidth, baseHeight, isCropModalOpen]);
+
+  // Download and load original profile photo for re-cropping
+  const handleEditCrop = async () => {
+    if (!profile?.original_logo_url) return;
+    setCropImageSrc(profile.original_logo_url);
+    setIsCropModalOpen(true);
+    setZoom(1.0);
+    setOffsetX(0);
+    setOffsetY(0);
+    
+    try {
+      const res = await fetch(profile.original_logo_url);
+      const blob = await res.blob();
+      const ext = profile.original_logo_url.split('.').pop()?.split('?')[0] || 'jpg';
+      const file = new File([blob], `original.${ext}`, { type: blob.type });
+      setCropFile(file);
+    } catch (err) {
+      console.error('Error fetching original image for crop edit:', err);
+    }
   };
 
   const handleCropAndSave = async () => {
@@ -1206,7 +1258,7 @@ export default function Perfil() {
                 )}
               </div>
 
-              <div className="w-full space-y-4 border-t border-outline-variant/20 pt-6">
+              <div className="w-full space-y-3 border-t border-outline-variant/20 pt-6">
                 <button 
                   onClick={handlePreviewProfile}
                   className="w-full py-2.5 bg-primary text-on-primary rounded-lg font-label-md hover:bg-primary-container transition-all cursor-pointer font-semibold shadow-sm"
@@ -1214,6 +1266,15 @@ export default function Perfil() {
                 >
                   Previsualizar Perfil Público
                 </button>
+                {profile?.original_logo_url && (
+                  <button 
+                    onClick={handleEditCrop}
+                    className="w-full py-2.5 bg-transparent text-primary border border-primary/20 rounded-lg font-label-md hover:bg-primary/5 transition-all cursor-pointer font-semibold"
+                    type="button"
+                  >
+                    Ajustar Encuadre Actual
+                  </button>
+                )}
               </div>
 
               <div className="mt-8 p-4 bg-surface-container-low rounded-lg w-full flex flex-col gap-2">
@@ -2791,6 +2852,7 @@ export default function Perfil() {
             {/* Viewport Frame */}
             <div className="w-[280px] h-[280px] rounded-full overflow-hidden border-4 border-primary/20 shadow-md relative bg-surface-container-low select-none">
               <img 
+                ref={imgRef}
                 src={cropImageSrc} 
                 onLoad={handleImageLoad}
                 onMouseDown={handleMouseDown}
@@ -2801,16 +2863,16 @@ export default function Perfil() {
                 onTouchMove={handleTouchMove}
                 onTouchEnd={handleTouchEnd}
                 style={{
-                  transform: `translate(${offsetX}px, ${offsetY}px) scale(${zoom})`,
+                  position: 'absolute',
+                  top: '50%',
+                  left: '50%',
+                  transform: `translate(-50%, -50%) translate(${offsetX}px, ${offsetY}px) scale(${zoom})`,
                   transformOrigin: 'center center',
                   cursor: isDragging ? 'grabbing' : 'grab',
                   maxWidth: 'none',
                   maxHeight: 'none',
                   width: `${baseWidth}px`,
                   height: `${baseHeight}px`,
-                  position: 'absolute',
-                  top: '0',
-                  left: '0',
                 }}
                 alt="Original a recortar"
                 draggable={false}
