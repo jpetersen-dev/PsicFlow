@@ -30,7 +30,9 @@ import {
   Trash2,
   MapPin,
   X,
-  Sparkles
+  Sparkles,
+  Grid,
+  Crop
 } from 'lucide-react';
 import { supabase } from '../lib/supabaseClient';
 import { hasFeature } from '../utils/planFeatures';
@@ -115,6 +117,7 @@ export default function Perfil() {
   const [dragStartOffset, setDragStartOffset] = useState({ x: 0, y: 0 });
   const [baseWidth, setBaseWidth] = useState(280);
   const [baseHeight, setBaseHeight] = useState(280);
+  const [croppingSlotId, setCroppingSlotId] = useState<string | null>(null);
 
   // Google Calendar integration states
   const [googleConnected, setGoogleConnected] = useState(false);
@@ -309,6 +312,7 @@ export default function Perfil() {
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
+      setCroppingSlotId(null);
       const reader = new FileReader();
       reader.onload = () => {
         setCropImageSrc(reader.result as string);
@@ -432,8 +436,22 @@ export default function Perfil() {
   }, [zoom, baseWidth, baseHeight, isCropModalOpen]);
 
   // Download and load original profile photo for re-cropping
+  // Download and load original profile photo for re-cropping
   const handleEditCrop = async () => {
     if (!profile?.original_logo_url) return;
+    
+    // Find slot ID for the active photo
+    const library: any[] = Array.isArray(profile.photo_library) ? profile.photo_library : [];
+    const activeItem = library.find(item => 
+      profile.logo_url && profile.logo_url.includes(item.cropped_url.split('?')[0])
+    );
+    
+    if (activeItem) {
+      setCroppingSlotId(activeItem.id);
+    } else {
+      setCroppingSlotId(null);
+    }
+    
     setCropImageSrc(profile.original_logo_url);
     setIsCropModalOpen(true);
     setZoom(1.0);
@@ -451,11 +469,113 @@ export default function Perfil() {
     }
   };
 
+  const handleDeletePhoto = async (slotId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!profile) return;
+    if (!confirm('¿Estás seguro de que deseas eliminar esta foto de tu galería?')) return;
+    
+    try {
+      const library: any[] = Array.isArray(profile.photo_library) ? profile.photo_library : [];
+      const itemToDelete = library.find(item => item.id === slotId);
+      if (!itemToDelete) return;
+      
+      const getPathFromUrl = (url: string) => {
+        const parts = url.split('/object/public/avatars/');
+        return parts.length > 1 ? parts[1].split('?')[0] : null;
+      };
+      
+      const origPath = getPathFromUrl(itemToDelete.original_url);
+      const cropPath = getPathFromUrl(itemToDelete.cropped_url);
+      
+      const pathsToDelete = [origPath, cropPath].filter(Boolean) as string[];
+      if (pathsToDelete.length > 0) {
+        await supabase.storage.from('avatars').remove(pathsToDelete);
+      }
+      
+      const updatedLibrary = library.filter(item => item.id !== slotId);
+      
+      let newLogoUrl = profile.logo_url;
+      let newOriginalLogoUrl = profile.original_logo_url;
+      
+      if (profile.logo_url && profile.logo_url.includes(itemToDelete.cropped_url.split('?')[0])) {
+        if (updatedLibrary.length > 0) {
+          newLogoUrl = updatedLibrary[0].cropped_url;
+          newOriginalLogoUrl = updatedLibrary[0].original_url;
+        } else {
+          newLogoUrl = null;
+          newOriginalLogoUrl = null;
+        }
+      }
+      
+      const { error } = await supabase
+        .from('profiles')
+        .update({
+          photo_library: updatedLibrary,
+          logo_url: newLogoUrl,
+          original_logo_url: newOriginalLogoUrl
+        })
+        .eq('id', profile.id);
+        
+      if (error) throw error;
+      alert('Foto eliminada correctamente.');
+      await fetchProfileAndOrg();
+    } catch (err: any) {
+      alert('Error al eliminar foto: ' + err.message);
+    }
+  };
+
+  const handleSelectActivePhoto = async (item: any) => {
+    if (!profile) return;
+    try {
+      const { error } = await supabase
+        .from('profiles')
+        .update({
+          logo_url: item.cropped_url,
+          original_logo_url: item.original_url
+        })
+        .eq('id', profile.id);
+        
+      if (error) throw error;
+      await fetchProfileAndOrg();
+    } catch (err: any) {
+      alert('Error al cambiar foto activa: ' + err.message);
+    }
+  };
+
+  const handleRecropSlot = async (item: any, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setCroppingSlotId(item.id);
+    setCropImageSrc(item.original_url);
+    setIsCropModalOpen(true);
+    setZoom(1.0);
+    setOffsetX(0);
+    setOffsetY(0);
+    
+    try {
+      const res = await fetch(item.original_url);
+      const blob = await res.blob();
+      const ext = item.original_url.split('.').pop()?.split('?')[0] || 'jpg';
+      const file = new File([blob], `original.${ext}`, { type: blob.type });
+      setCropFile(file);
+    } catch (err) {
+      console.error('Error fetching image for slot crop edit:', err);
+    }
+  };
+
   const handleCropAndSave = async () => {
     if (!cropFile || !profile || !cropImageSrc) return;
+    
+    const library: any[] = Array.isArray(profile.photo_library) ? profile.photo_library : [];
+    
+    if (!croppingSlotId && library.length >= 5) {
+      alert('Límite de 5 fotos en la galería alcanzado. Por favor elimina una foto antes de subir otra.');
+      return;
+    }
+    
     setSavingCrop(true);
     try {
       const img = new Image();
+      img.crossOrigin = "anonymous";
       img.src = cropImageSrc;
       await new Promise((resolve) => {
         img.onload = resolve;
@@ -488,7 +608,6 @@ export default function Perfil() {
       
       ctx.drawImage(img, sourceX, sourceY, sourceWidth, sourceHeight, 0, 0, 400, 400);
       
-      // Optimize image: convert to compressed JPEG (85% quality)
       const croppedBlob = await new Promise<Blob | null>((resolve) => {
         canvas.toBlob((blob) => resolve(blob), 'image/jpeg', 0.85);
       });
@@ -498,46 +617,71 @@ export default function Perfil() {
       const croppedFile = new File([croppedBlob], `logo_${profile.id}.jpg`, { type: 'image/jpeg' });
       
       const ext = cropFile.name.split('.').pop() || 'jpg';
-      const originalPath = `${profile.user_id}/${profile.id}_original.${ext}`;
-      const croppedPath = `${profile.user_id}/${profile.id}_logo.jpg`;
+      const slotId = croppingSlotId || Date.now().toString();
       
-      // 1. Limpiar todos los archivos anteriores del usuario para evitar acumulación
-      try {
-        const { data: files } = await supabase.storage
-          .from('avatars')
-          .list(profile.user_id);
+      const originalPath = `${profile.user_id}/${profile.id}_original_${slotId}.${ext}`;
+      const croppedPath = `${profile.user_id}/${profile.id}_logo_${slotId}.jpg`;
+      
+      if (croppingSlotId) {
+        const oldItem = library.find(item => item.id === croppingSlotId);
+        if (oldItem) {
+          const getPathFromUrl = (url: string) => {
+            const parts = url.split('/object/public/avatars/');
+            return parts.length > 1 ? parts[1].split('?')[0] : null;
+          };
+          const oldOrigPath = getPathFromUrl(oldItem.original_url);
+          const oldCropPath = getPathFromUrl(oldItem.cropped_url);
           
-        if (files && files.length > 0) {
-          const pathsToRemove = files.map(file => `${profile.user_id}/${file.name}`);
-          await supabase.storage.from('avatars').remove(pathsToRemove);
+          const pathsToDelete = [oldOrigPath, oldCropPath].filter(Boolean).filter(p => 
+            p !== originalPath && p !== croppedPath
+          ) as string[];
+          
+          if (pathsToDelete.length > 0) {
+            await supabase.storage.from('avatars').remove(pathsToDelete);
+          }
         }
-      } catch (cleanErr) {
-        console.warn('Error al limpiar archivos antiguos del storage:', cleanErr);
       }
       
-      // 2. Subir nuevo archivo original
       const { error: originalErr } = await supabase.storage
         .from('avatars')
         .upload(originalPath, cropFile, { upsert: true });
       if (originalErr) throw originalErr;
       
-      // 3. Subir nuevo archivo recortado
       const { error: croppedErr } = await supabase.storage
         .from('avatars')
         .upload(croppedPath, croppedFile, { upsert: true });
       if (croppedErr) throw croppedErr;
       
-      // 4. Obtener URLs públicas con cache-busting (?t=timestamp)
       const timestamp = Date.now();
       const originalUrl = supabase.storage.from('avatars').getPublicUrl(originalPath).data.publicUrl + `?t=${timestamp}`;
       const croppedUrl = supabase.storage.from('avatars').getPublicUrl(croppedPath).data.publicUrl + `?t=${timestamp}`;
       
-      // 5. Actualizar base de datos
+      let updatedLibrary = [...library];
+      if (croppingSlotId) {
+        updatedLibrary = library.map(item => {
+          if (item.id === croppingSlotId) {
+            return {
+              id: item.id,
+              original_url: originalUrl,
+              cropped_url: croppedUrl
+            };
+          }
+          return item;
+        });
+      } else {
+        updatedLibrary.push({
+          id: slotId,
+          original_url: originalUrl,
+          cropped_url: croppedUrl
+        });
+      }
+      
       const { error: dbErr } = await supabase
         .from('profiles')
         .update({ 
           logo_url: croppedUrl,
-          original_logo_url: originalUrl
+          original_logo_url: originalUrl,
+          photo_library: updatedLibrary
         })
         .eq('id', profile.id);
         
@@ -1275,6 +1419,98 @@ export default function Perfil() {
                     Ajustar Encuadre Actual
                   </button>
                 )}
+              </div>
+
+              {/* Media Library */}
+              <div className="w-full border-t border-outline-variant/20 pt-6 mt-6">
+                <div className="flex justify-between items-center mb-3">
+                  <span className="text-xs font-bold text-on-surface flex items-center gap-1.5">
+                    <Grid className="w-3.5 h-3.5 text-primary" />
+                    <span>Galería de Fotos ({Array.isArray(profile?.photo_library) ? profile.photo_library.length : 0}/5)</span>
+                  </span>
+                  <button 
+                    onClick={() => {
+                      const library = Array.isArray(profile?.photo_library) ? profile.photo_library : [];
+                      if (library.length >= 5) {
+                        alert('Límite de 5 fotos en la galería alcanzado. Por favor elimina una foto antes de subir otra.');
+                        return;
+                      }
+                      fileInputRef.current?.click();
+                    }}
+                    className="text-[10px] text-primary hover:underline font-bold flex items-center gap-0.5 cursor-pointer"
+                    type="button"
+                  >
+                    + Agregar
+                  </button>
+                </div>
+                
+                <div className="grid grid-cols-5 gap-2">
+                  {/* Render uploaded items */}
+                  {Array.isArray(profile?.photo_library) && profile.photo_library.map((item: any) => {
+                    const isActive = profile.logo_url && profile.logo_url.includes(item.cropped_url.split('?')[0]);
+                    return (
+                      <div 
+                        key={item.id} 
+                        onClick={() => handleSelectActivePhoto(item)}
+                        className={`relative aspect-square rounded-lg overflow-hidden border-2 cursor-pointer transition-all shadow-sm group/thumb ${
+                          isActive 
+                            ? 'border-primary ring-2 ring-primary/20 scale-95' 
+                            : 'border-outline-variant/40 hover:border-primary/50'
+                        }`}
+                        title={isActive ? "Foto de perfil activa" : "Hacer foto de perfil activa"}
+                      >
+                        <img 
+                          src={item.cropped_url} 
+                          alt="Miniatura" 
+                          className="w-full h-full object-cover" 
+                        />
+                        
+                        {/* Hover Overlay Actions */}
+                        <div className="absolute inset-0 bg-black/40 opacity-0 group-hover/thumb:opacity-100 transition-opacity flex items-center justify-center gap-1.5 p-1">
+                          <button
+                            onClick={(e) => handleRecropSlot(item, e)}
+                            className="p-1 bg-surface-container-highest hover:bg-surface-container-lowest text-on-surface rounded transition-colors"
+                            title="Recortar foto"
+                            type="button"
+                          >
+                            <Crop className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            onClick={(e) => handleDeletePhoto(item.id, e)}
+                            className="p-1 bg-error/15 hover:bg-error text-error hover:text-on-error rounded transition-colors"
+                            title="Eliminar foto"
+                            type="button"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+
+                        {/* Active Indicator Badge */}
+                        {isActive && (
+                          <div className="absolute top-0.5 right-0.5 bg-primary text-on-primary rounded-full p-0.5 shadow-sm">
+                            <Check className="w-2.5 h-2.5 font-bold" />
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                  
+                  {/* Empty slots placeholders */}
+                  {Array.from({ length: 5 - (Array.isArray(profile?.photo_library) ? profile.photo_library.length : 0) }).map((_, idx) => (
+                    <div 
+                      key={`empty-${idx}`}
+                      onClick={() => {
+                        const library = Array.isArray(profile?.photo_library) ? profile.photo_library : [];
+                        if (library.length >= 5) return;
+                        fileInputRef.current?.click();
+                      }}
+                      className="aspect-square border border-dashed border-outline-variant/60 hover:border-primary/50 rounded-lg flex items-center justify-center bg-surface-container-low/40 hover:bg-surface-container-low transition-colors cursor-pointer text-on-surface-variant/40 hover:text-primary"
+                      title="Subir nueva foto"
+                    >
+                      <Plus className="w-4 h-4" />
+                    </div>
+                  ))}
+                </div>
               </div>
 
               <div className="mt-8 p-4 bg-surface-container-low rounded-lg w-full flex flex-col gap-2">
@@ -2854,6 +3090,7 @@ export default function Perfil() {
               <img 
                 ref={imgRef}
                 src={cropImageSrc} 
+                crossOrigin="anonymous"
                 onLoad={handleImageLoad}
                 onMouseDown={handleMouseDown}
                 onMouseMove={handleMouseMove}
