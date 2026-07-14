@@ -32,7 +32,10 @@ import {
   X,
   Sparkles,
   Grid,
-  Crop
+  Crop,
+  Users,
+  UserPlus,
+  Mail
 } from 'lucide-react';
 import { supabase } from '../lib/supabaseClient';
 import { hasFeature } from '../utils/planFeatures';
@@ -147,6 +150,17 @@ export default function Perfil() {
   const [serviceActiveStatus, setServiceActiveStatus] = useState(true);
   const [isSavingService, setIsSavingService] = useState(false);
 
+  // Team Management states
+  const [activeTenantId, setActiveTenantId] = useState<string | null>(null);
+  const [teamMembers, setTeamMembers] = useState<any[]>([]);
+  const [pendingInvitations, setPendingInvitations] = useState<any[]>([]);
+  const [loadingTeam, setLoadingTeam] = useState(false);
+  const [showInviteModal, setShowInviteModal] = useState(false);
+  const [inviteEmail, setInviteEmail] = useState('');
+  const [inviteRole, setInviteRole] = useState('psicologo');
+  const [submittingInvite, setSubmittingInvite] = useState(false);
+  const [inviteError, setInviteError] = useState('');
+
   const fileInputRef = useRef<HTMLInputElement>(null);
   const imgRef = useRef<HTMLImageElement>(null);
 
@@ -167,6 +181,15 @@ export default function Perfil() {
     const tfa = localStorage.getItem('tfa-enabled');
     if (tfa !== null) setTfaEnabled(tfa === 'true');
   }, []);
+
+  // Load team and invitations when clinics tab is selected
+  useEffect(() => {
+    const tid = localStorage.getItem('active-tenant-id');
+    setActiveTenantId(tid);
+    if (activeMainTab === 'clinics' && tid) {
+      fetchTeamAndInvitations(tid);
+    }
+  }, [activeMainTab]);
 
   // Check for Google callback query params
   useEffect(() => {
@@ -886,6 +909,96 @@ export default function Perfil() {
       }
     } catch (err) {
       console.error('Error fetching user clinics:', err);
+    }
+  };
+
+  const fetchTeamAndInvitations = async (tenantId: string) => {
+    if (!tenantId) return;
+    setLoadingTeam(true);
+    try {
+      // 1. Fetch team members
+      const { data: members, error: membersErr } = await supabase
+        .from('profiles')
+        .select('id, full_name, email, role_name, username')
+        .eq('organization_id', tenantId);
+
+      if (!membersErr && members) {
+        setTeamMembers(members);
+      }
+
+      // 2. Fetch pending invitations
+      const { data: invites, error: invitesErr } = await supabase
+        .from('invitations')
+        .select('*')
+        .eq('organization_id', tenantId)
+        .eq('is_used', false)
+        .gt('expires_at', new Date().toISOString());
+
+      if (!invitesErr && invites) {
+        setPendingInvitations(invites);
+      }
+    } catch (err) {
+      console.error('Error fetching team or invitations:', err);
+    } finally {
+      setLoadingTeam(false);
+    }
+  };
+
+  const handleCancelInvitation = async (inviteId: string) => {
+    if (!confirm('¿Estás seguro de que deseas revocar esta invitación? El código ya no podrá ser utilizado.')) return;
+    try {
+      const { error } = await supabase
+        .from('invitations')
+        .delete()
+        .eq('id', inviteId);
+
+      if (error) throw error;
+
+      alert('Invitación revocada correctamente.');
+      const tid = localStorage.getItem('active-tenant-id');
+      if (tid) {
+        fetchTeamAndInvitations(tid);
+      }
+    } catch (err: any) {
+      alert('Error al revocar la invitación: ' + err.message);
+    }
+  };
+
+  const handleInviteSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const tid = localStorage.getItem('active-tenant-id');
+    if (!inviteEmail.trim() || !tid) return;
+    
+    setSubmittingInvite(true);
+    setInviteError('');
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch('/api/auth/invite-collaborator', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session?.access_token}`
+        },
+        body: JSON.stringify({
+          email: inviteEmail.trim().toLowerCase(),
+          role_name: inviteRole,
+          organization_id: tid
+        })
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || 'Error al enviar invitación.');
+      }
+
+      alert('¡Invitación creada y enviada correctamente!');
+      setInviteEmail('');
+      setShowInviteModal(false);
+      fetchTeamAndInvitations(tid);
+    } catch (err: any) {
+      setInviteError(err.message || 'Error al procesar la invitación.');
+    } finally {
+      setSubmittingInvite(false);
     }
   };
 
@@ -2936,6 +3049,135 @@ export default function Perfil() {
                 </table>
               </div>
             </section>
+
+            {/* Seccion de Colaboradores e Invitaciones para el Administrador */}
+            {activeTenantId && userClinics.find(c => c.organization_id === activeTenantId)?.role_name === 'admin_clinica' && (
+              <section className="col-span-12 bg-surface-container-lowest rounded-xl p-8 shadow-[0px_4px_12px_rgba(0,0,0,0.03)] border border-outline-variant/10 space-y-6 mt-6">
+                <div className="border-b border-outline-variant/25 pb-4 flex flex-col sm:flex-row justify-between sm:items-center gap-4">
+                  <div>
+                    <h3 className="font-headline-sm text-headline-sm text-on-surface font-bold flex items-center gap-2">
+                      <Users className="w-5 h-5 text-primary" />
+                      <span>Colaboradores y Equipo de Trabajo</span>
+                    </h3>
+                    <p className="text-body-sm text-on-surface-variant text-sm mt-1">
+                      Administra los psicólogos y personal administrativo de esta clínica. Las capacidades de contratación se regulan según tu nivel de suscripción.
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => {
+                      setInviteEmail('');
+                      setInviteRole('psicologo');
+                      setInviteError('');
+                      setShowInviteModal(true);
+                    }}
+                    className="px-4 py-2 bg-primary text-on-primary hover:bg-primary/95 text-xs font-bold rounded-lg transition-all flex items-center gap-1.5 cursor-pointer shadow-md"
+                    type="button"
+                  >
+                    <UserPlus className="w-4 h-4" />
+                    <span>Invitar Colaborador</span>
+                  </button>
+                </div>
+
+                {/* Team Members List */}
+                <div className="space-y-4">
+                  <h4 className="text-sm font-bold text-on-surface flex items-center gap-2">
+                    <span className="w-1.5 h-3 bg-primary rounded-full"></span>
+                    <span>Equipo Activo</span>
+                  </h4>
+                  <div className="overflow-x-auto w-full">
+                    <table className="w-full text-left text-sm border-collapse">
+                      <thead>
+                        <tr className="border-b border-outline-variant/20 text-on-surface-variant text-xs uppercase font-semibold">
+                          <th className="pb-3 pr-4">Nombre</th>
+                          <th className="pb-3 pr-4">Usuario</th>
+                          <th className="pb-3 pr-4">Email</th>
+                          <th className="pb-3 pr-4">Rol en Clínica</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-outline-variant/10">
+                        {teamMembers.map((member: any) => (
+                          <tr key={member.id} className="hover:bg-surface-container-low/30 transition-colors">
+                            <td className="py-3 pr-4 font-semibold text-on-surface">{member.full_name || 'Sin nombre registrado'}</td>
+                            <td className="py-3 pr-4 text-xs font-mono text-primary">@{member.username}</td>
+                            <td className="py-3 pr-4 text-on-surface-variant text-xs">{member.email}</td>
+                            <td className="py-3 pr-4">
+                              <span className={`px-2 py-0.5 text-[10px] font-bold rounded ${
+                                member.role_name === 'admin_clinica' 
+                                  ? 'bg-primary/10 text-primary' 
+                                  : member.role_name === 'psicologo' 
+                                    ? 'bg-success/10 text-success' 
+                                    : 'bg-warning/10 text-warning'
+                              }`}>
+                                {member.role_name === 'admin_clinica' ? 'Administrador' : member.role_name === 'psicologo' ? 'Psicólogo' : member.role_name}
+                              </span>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                {/* Pending Invitations List */}
+                {pendingInvitations.length > 0 && (
+                  <div className="space-y-4 pt-4 border-t border-outline-variant/10">
+                    <h4 className="text-sm font-bold text-on-surface flex items-center gap-2">
+                      <span className="w-1.5 h-3 bg-warning rounded-full"></span>
+                      <span>Invitaciones Pendientes</span>
+                    </h4>
+                    <div className="overflow-x-auto w-full">
+                      <table className="w-full text-left text-sm border-collapse">
+                        <thead>
+                          <tr className="border-b border-outline-variant/20 text-on-surface-variant text-xs uppercase font-semibold">
+                            <th className="pb-3 pr-4">Email Invitado</th>
+                            <th className="pb-3 pr-4">Rol Asignado</th>
+                            <th className="pb-3 pr-4">Vence el</th>
+                            <th className="pb-3 text-right">Acciones</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-outline-variant/10">
+                          {pendingInvitations.map((invite: any) => {
+                            const inviteLink = `${window.location.origin}/invitacion/${invite.token}`;
+                            return (
+                              <tr key={invite.id} className="hover:bg-surface-container-low/30 transition-colors">
+                                <td className="py-3 pr-4 text-on-surface font-medium text-xs">{invite.email}</td>
+                                <td className="py-3 pr-4">
+                                  <span className="px-2 py-0.5 bg-outline-variant/20 text-on-surface-variant text-[10px] font-bold rounded">
+                                    {invite.role_name === 'psicologo' ? 'Psicólogo' : invite.role_name}
+                                  </span>
+                                </td>
+                                <td className="py-3 pr-4 text-on-surface-variant text-xs">
+                                  {new Date(invite.expires_at).toLocaleDateString()}
+                                </td>
+                                <td className="py-3 text-right space-x-2">
+                                  <button
+                                    onClick={() => {
+                                      navigator.clipboard.writeText(inviteLink);
+                                      alert('¡Enlace de invitación copiado al portapapeles!');
+                                    }}
+                                    className="px-2 py-1 text-xs font-semibold text-primary hover:underline cursor-pointer"
+                                    type="button"
+                                  >
+                                    Copiar Link
+                                  </button>
+                                  <button
+                                    onClick={() => handleCancelInvitation(invite.id)}
+                                    className="px-2 py-1 text-xs font-semibold text-error hover:underline cursor-pointer"
+                                    type="button"
+                                  >
+                                    Revocar
+                                  </button>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+              </section>
+            )}
           </div>
         )}
         {/* Footer */}
@@ -3169,6 +3411,94 @@ export default function Perfil() {
               </button>
             </div>
 
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Invitar Colaborador */}
+      {showInviteModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm transition-all duration-300">
+          <div className="bg-surface-container-lowest border border-outline-variant/20 rounded-3xl p-6 sm:p-8 max-w-md w-full shadow-2xl relative flex flex-col gap-6 text-on-surface">
+            
+            {/* Header */}
+            <div className="flex justify-between items-center border-b border-outline-variant/10 pb-3">
+              <div className="flex items-center gap-2 text-primary">
+                <UserPlus className="w-5 h-5" />
+                <h3 className="text-lg font-bold font-display text-on-surface">Invitar Colaborador</h3>
+              </div>
+              <button 
+                onClick={() => setShowInviteModal(false)}
+                className="p-1 rounded-full hover:bg-surface-container-high transition-colors text-on-surface-variant hover:text-on-surface cursor-pointer"
+                type="button"
+                disabled={submittingInvite}
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {inviteError && (
+              <div className="bg-error/10 border border-error/25 p-3 rounded-xl flex items-start gap-2.5 text-xs text-error">
+                <Info className="w-4 h-4 shrink-0 mt-0.5" />
+                <span>{inviteError}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleInviteSubmit} className="space-y-4">
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-on-surface-variant">Correo Electrónico del Profesional</label>
+                <div className="relative">
+                  <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-on-surface-variant/65">
+                    <Mail className="w-4 h-4" />
+                  </span>
+                  <input 
+                    type="email" 
+                    required 
+                    value={inviteEmail}
+                    onChange={(e) => setInviteEmail(e.target.value)}
+                    placeholder="correo@ejemplo.com"
+                    className="w-full bg-surface-container-low border border-outline-variant/35 rounded-xl pl-10 pr-3 py-2.5 text-sm text-on-surface focus:border-primary focus:outline-none placeholder:text-on-surface-variant/50"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-on-surface-variant">Rol Asignado en Clínica</label>
+                <select
+                  value={inviteRole}
+                  onChange={(e) => setInviteRole(e.target.value)}
+                  className="w-full bg-surface-container-low border border-outline-variant/35 rounded-xl px-3 py-2.5 text-sm text-on-surface focus:border-primary focus:outline-none cursor-pointer"
+                >
+                  <option value="psicologo">Psicólogo / Terapeuta</option>
+                  <option value="administrativo">Administrativo / Secretaría</option>
+                  <option value="admin_clinica">Co-Administrador</option>
+                </select>
+              </div>
+
+              <div className="w-full flex gap-3 border-t border-outline-variant/10 pt-4 mt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowInviteModal(false)}
+                  className="flex-1 py-2.5 bg-surface-container-high hover:bg-surface-container-highest text-on-surface text-sm font-semibold rounded-xl transition-colors cursor-pointer"
+                  disabled={submittingInvite}
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="flex-1 py-2.5 bg-primary hover:bg-primary-container text-on-primary text-sm font-semibold rounded-xl transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                  disabled={submittingInvite}
+                >
+                  {submittingInvite ? (
+                    <>
+                      <RefreshCw className="w-4 h-4 animate-spin" />
+                      <span>Invitando...</span>
+                    </>
+                  ) : (
+                    <span>Enviar Invitación</span>
+                  )}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

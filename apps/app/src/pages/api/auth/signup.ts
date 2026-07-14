@@ -2,6 +2,7 @@ import type { NextApiRequest, NextApiResponse } from 'next';
 import { createClient } from '@supabase/supabase-js';
 import { supabase } from '../../../lib/supabaseClient';
 import { validateRut, validateEmail } from '../../../utils/validators';
+import { PLAN_FEATURES, PlanLevel } from '../../../utils/planFeatures';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
@@ -11,28 +12,23 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  const { token, full_name, username, email, password, rut_professional } = req.body;
+  const { 
+    token, 
+    full_name, 
+    username, 
+    email, 
+    password, 
+    rut_professional, 
+    is_google, 
+    is_link_existing 
+  } = req.body;
 
-  if (!token || !full_name || !username || !email || !password || !rut_professional) {
-    return res.status(400).json({ error: 'Todos los campos son obligatorios.' });
+  if (!token) {
+    return res.status(400).json({ error: 'El código de invitación es obligatorio.' });
   }
 
-  // Clear and format RUT
-  const cleanRutStr = rut_professional.trim().replace(/\./g, '').replace(/ /g, '').replace(/-/g, '');
-  const formattedRut = cleanRutStr.slice(0, -1) + '-' + cleanRutStr.slice(-1).toUpperCase();
-
   try {
-    // 1. Validate RUT algoritmically
-    if (!validateRut(cleanRutStr)) {
-      return res.status(400).json({ error: 'El RUT ingresado no es válido.' });
-    }
-
-    // 2. Validate Email
-    if (!validateEmail(email.trim())) {
-      return res.status(400).json({ error: 'El formato de correo electrónico es incorrecto.' });
-    }
-
-    // 3. Verify Invitation Token
+    // 1. Verify Invitation Token
     const { data: invitation, error: inviteErr } = await supabase
       .from('invitations')
       .select('*')
@@ -46,66 +42,172 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(400).json({ error: 'Invitación no encontrada, ya utilizada o expirada.' });
     }
 
-    // 4. Register or authenticate user
-    // We check if a profile with this email already exists to determine if they are an existing user
-    const { data: existingProfile } = await supabase
-      .from('profiles')
-      .select('user_id')
-      .eq('email', email.trim().toLowerCase())
+    // 2. Plan Limit Verification (maxUsers)
+    const { data: orgData, error: orgErr } = await supabase
+      .from('organizations')
+      .select('current_plan')
+      .eq('id', invitation.organization_id)
       .limit(1)
-      .maybeSingle();
+      .single();
 
-    let authData;
-    let authErr;
-
-    if (existingProfile) {
-      // User already exists, authenticate to verify password before linking
-      const authResult = await supabase.auth.signInWithPassword({
-        email: email.trim().toLowerCase(),
-        password,
-      });
-      authData = authResult.data;
-      authErr = authResult.error;
-
-      if (authErr || !authData.user) {
-        return res.status(400).json({ 
-          error: 'Este correo ya está registrado en PsicFlow. Por favor, ingresa la contraseña correcta de tu cuenta existente para vincular esta clínica.' 
-        });
-      }
-    } else {
-      // New user registration
-      const authResult = await supabase.auth.signUp({
-        email: email.trim(),
-        password,
-      });
-      authData = authResult.data;
-      authErr = authResult.error;
-
-      if (authErr || !authData.user) {
-        return res.status(400).json({ error: authErr?.message || 'Error al registrar la cuenta en autenticación.' });
-      }
+    if (orgErr || !orgData) {
+      return res.status(400).json({ error: 'No se pudo obtener la clínica asociada a la invitación.' });
     }
 
-    // 5. Create Profile in DB
+    const plan = (orgData.current_plan || 'Starter') as PlanLevel;
+    const features = PLAN_FEATURES[plan];
+    const maxUsers = features ? features.maxUsers : 1;
+
+    // Count existing team members
+    const { count: currentUsersCount, error: countErr } = await supabase
+      .from('profiles')
+      .select('*', { count: 'exact', head: true })
+      .eq('organization_id', invitation.organization_id);
+
+    if (countErr) {
+      return res.status(400).json({ error: 'Error al verificar capacidad de la clínica.' });
+    }
+
+    if (currentUsersCount !== null && currentUsersCount >= maxUsers) {
+      return res.status(400).json({ 
+        error: `Límite de especialistas alcanzado para el plan ${plan} de esta clínica (${maxUsers} máx).` 
+      });
+    }
+
+    let authUserId = '';
+    let authEmail = '';
+    let authEmailFromVerify = '';
+    let finalFullName = '';
+    let finalUsername = '';
+    let finalRut = '';
+
+    if (is_link_existing || is_google) {
+      // Get accessToken from headers
+      const authHeader = req.headers.authorization;
+      const accessToken = authHeader && authHeader.split(' ')[1];
+      if (!accessToken) {
+        return res.status(401).json({ error: 'Falta token de sesión.' });
+      }
+
+      // Verify token via getUser
+      const { data: { user }, error: verifyErr } = await supabase.auth.getUser(accessToken);
+      if (verifyErr || !user) {
+        return res.status(401).json({ error: 'Sesión inválida o expirada: ' + verifyErr?.message });
+      }
+
+      authUserId = user.id;
+      authEmailFromVerify = user.email || '';
+
+      if (is_link_existing) {
+        // Link existing profile
+        const { data: existingProfile, error: profileFetchErr } = await supabase
+          .from('profiles')
+          .select('full_name, username, email, rut_professional')
+          .eq('user_id', user.id)
+          .limit(1)
+          .single();
+
+        if (profileFetchErr || !existingProfile) {
+          return res.status(400).json({ error: 'No se encontró tu perfil existente para vincular.' });
+        }
+
+        finalFullName = existingProfile.full_name;
+        finalUsername = existingProfile.username;
+        finalRut = existingProfile.rut_professional;
+      } else {
+        // Google signup onboarding completion
+        if (!full_name || !username || !rut_professional) {
+          return res.status(400).json({ error: 'Nombre, usuario y RUT son obligatorios.' });
+        }
+        
+        const cleanRutStr = rut_professional.trim().replace(/\./g, '').replace(/ /g, '').replace(/-/g, '');
+        if (!validateRut(cleanRutStr)) {
+          return res.status(400).json({ error: 'El RUT ingresado no es válido.' });
+        }
+        finalRut = cleanRutStr.slice(0, -1) + '-' + cleanRutStr.slice(-1).toUpperCase();
+        finalFullName = full_name.trim();
+        finalUsername = username.trim().toLowerCase();
+      }
+    } else {
+      // Normal signup
+      if (!full_name || !username || !email || !password || !rut_professional) {
+        return res.status(400).json({ error: 'Todos los campos son obligatorios.' });
+      }
+
+      const cleanRutStr = rut_professional.trim().replace(/\./g, '').replace(/ /g, '').replace(/-/g, '');
+      if (!validateRut(cleanRutStr)) {
+        return res.status(400).json({ error: 'El RUT ingresado no es válido.' });
+      }
+
+      if (!validateEmail(email.trim())) {
+        return res.status(400).json({ error: 'El formato de correo electrónico es incorrecto.' });
+      }
+
+      finalRut = cleanRutStr.slice(0, -1) + '-' + cleanRutStr.slice(-1).toUpperCase();
+      finalFullName = full_name.trim();
+      finalUsername = username.trim().toLowerCase();
+      authEmail = email.trim().toLowerCase();
+
+      // Check if a profile already exists
+      const { data: existingProfile } = await supabase
+        .from('profiles')
+        .select('user_id')
+        .eq('email', authEmail)
+        .limit(1)
+        .maybeSingle();
+
+      let authData;
+      let authErr;
+
+      if (existingProfile) {
+        // Authenticate password first
+        const authResult = await supabase.auth.signInWithPassword({
+          email: authEmail,
+          password,
+        });
+        authData = authResult.data;
+        authErr = authResult.error;
+
+        if (authErr || !authData.user) {
+          return res.status(400).json({ 
+            error: 'Este correo ya está registrado. Ingresa la contraseña correcta para vincular la clínica.' 
+          });
+        }
+      } else {
+        // Sign up
+        const authResult = await supabase.auth.signUp({
+          email: authEmail,
+          password,
+        });
+        authData = authResult.data;
+        authErr = authResult.error;
+
+        if (authErr || !authData.user) {
+          return res.status(400).json({ error: authErr?.message || 'Error al registrar usuario.' });
+        }
+      }
+
+      authUserId = authData.user.id;
+    }
+
+    // 3. Create profile in DB
     const { error: profileErr } = await supabase
       .from('profiles')
       .insert({
         organization_id: invitation.organization_id,
-        user_id: authData.user.id,
-        rut_professional: formattedRut,
-        full_name: full_name.trim(),
+        user_id: authUserId,
+        rut_professional: finalRut,
+        full_name: finalFullName,
         role_name: invitation.role_name,
-        username: username.trim().toLowerCase(),
-        email: email.trim().toLowerCase(),
+        username: finalUsername,
+        email: authEmail || authEmailFromVerify,
       });
 
     if (profileErr) {
-      // Rollback Auth user if profile creation fails? Supabase Auth does not easily support rollback from client,
-      // but we return the error to the user.
       return res.status(400).json({ error: 'Error al registrar el perfil clínico: ' + profileErr.message });
     }
 
-    // 6. Mark Invitation as used using tenant header to pass RLS policy
+    // 4. Mark Invitation as used using tenant header to pass RLS policy
     const supabaseTenant = createClient(supabaseUrl, supabaseAnonKey, {
       global: { headers: { 'x-tenant-id': invitation.organization_id } },
     });
@@ -122,12 +224,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(200).json({
       success: true,
       message: 'Cuenta registrada exitosamente.',
-      session: authData.session,
       user: {
-        id: authData.user.id,
-        email: authData.user.email,
-        full_name: full_name.trim(),
-        username: username.trim().toLowerCase(),
+        id: authUserId,
+        email: authEmail || authEmailFromVerify,
+        full_name: finalFullName,
+        username: finalUsername,
         role: invitation.role_name,
       },
       organization_id: invitation.organization_id,
