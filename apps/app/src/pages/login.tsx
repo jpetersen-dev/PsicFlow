@@ -48,6 +48,12 @@ export default function Login() {
             router.push(`/invitacion/${pendingInvite}`);
           } else {
             setError('Acceso denegado. No tienes un perfil clínico registrado. Por favor, solicita un código de invitación.');
+            // Log failed access attempt
+            await supabase.from('failed_access_logs').insert({
+              email: session.user.email || 'unknown',
+              role_attempted: 'none',
+              reason: 'No tiene perfil clínico en PsicFlow'
+            });
             await supabase.auth.signOut();
           }
           return;
@@ -58,6 +64,12 @@ export default function Login() {
         const validRoles = ['admin_clinica', 'psicologo', 'administrativo'];
         if (!validRoles.includes(profile.role_name)) {
           setError('Acceso denegado. Esta plataforma es para uso profesional. Si eres paciente, inicia sesión en el Portal del Paciente.');
+          // Log failed access attempt
+          await supabase.from('failed_access_logs').insert({
+            email: session.user.email || 'unknown',
+            role_attempted: profile.role_name,
+            reason: 'Rol no autorizado (paciente)'
+          });
           await supabase.auth.signOut();
           return;
         }

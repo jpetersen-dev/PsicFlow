@@ -42,8 +42,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(400).json({ error: 'Invitación no encontrada, ya utilizada o expirada.' });
     }
 
+    // Initialize tenant-scoped client to bypass RLS for this specific clinic
+    const supabaseTenant = createClient(supabaseUrl, supabaseAnonKey, {
+      global: { headers: { 'x-tenant-id': invitation.organization_id } },
+    });
+
     // 2. Plan Limit Verification (maxUsers)
-    const { data: orgData, error: orgErr } = await supabase
+    const { data: orgData, error: orgErr } = await supabaseTenant
       .from('organizations')
       .select('current_plan')
       .eq('id', invitation.organization_id)
@@ -59,7 +64,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const maxUsers = features ? features.maxUsers : 1;
 
     // Count existing team members
-    const { count: currentUsersCount, error: countErr } = await supabase
+    const { count: currentUsersCount, error: countErr } = await supabaseTenant
       .from('profiles')
       .select('*', { count: 'exact', head: true })
       .eq('organization_id', invitation.organization_id);
@@ -191,7 +196,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     // 3. Create profile in DB
-    const { error: profileErr } = await supabase
+    const { error: profileErr } = await supabaseTenant
       .from('profiles')
       .insert({
         organization_id: invitation.organization_id,
@@ -207,10 +212,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(400).json({ error: 'Error al registrar el perfil clínico: ' + profileErr.message });
     }
 
-    // 4. Mark Invitation as used using tenant header to pass RLS policy
-    const supabaseTenant = createClient(supabaseUrl, supabaseAnonKey, {
-      global: { headers: { 'x-tenant-id': invitation.organization_id } },
-    });
+    // 4. Mark Invitation as used
 
     const { error: updateErr } = await supabaseTenant
       .from('invitations')

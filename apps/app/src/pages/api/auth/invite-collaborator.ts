@@ -1,8 +1,12 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import crypto from 'crypto';
+import { createClient } from '@supabase/supabase-js';
 import { supabase } from '../../../lib/supabaseClient';
 import { sendEmail } from '../../../utils/emails';
 import { PLAN_FEATURES, PlanLevel } from '../../../utils/planFeatures';
+
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') {
@@ -22,14 +26,19 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   try {
-    // 1. Authenticate user from JWT
+    // Initialize tenant-scoped client to bypass RLS for this specific clinic
+    const supabaseTenant = createClient(supabaseUrl, supabaseAnonKey, {
+      global: { headers: { 'x-tenant-id': organization_id } },
+    });
+
+    // 1. Authenticate user from JWT (auth is global)
     const { data: { user }, error: authErr } = await supabase.auth.getUser(accessToken);
     if (authErr || !user) {
       return res.status(401).json({ error: 'Sesión inválida o expirada.' });
     }
 
-    // 2. Validate user has admin role in this organization
-    const { data: adminProfile, error: profileErr } = await supabase
+    // 2. Validate user has admin role in this organization (using tenant client)
+    const { data: adminProfile, error: profileErr } = await supabaseTenant
       .from('profiles')
       .select('role_name')
       .eq('user_id', user.id)
@@ -43,8 +52,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       });
     }
 
-    // 3. Plan Limit Verification (maxUsers)
-    const { data: orgData, error: orgErr } = await supabase
+    // 3. Plan Limit Verification (maxUsers) (using tenant client)
+    const { data: orgData, error: orgErr } = await supabaseTenant
       .from('organizations')
       .select('name, current_plan')
       .eq('id', organization_id)
@@ -60,7 +69,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const maxUsers = features ? features.maxUsers : 1;
 
     // Count existing team members
-    const { count: currentUsersCount, error: countErr } = await supabase
+    const { count: currentUsersCount, error: countErr } = await supabaseTenant
       .from('profiles')
       .select('*', { count: 'exact', head: true })
       .eq('organization_id', organization_id);
@@ -70,7 +79,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     // Count active pending invitations
-    const { count: pendingInvitesCount, error: pendingErr } = await supabase
+    const { count: pendingInvitesCount, error: pendingErr } = await supabaseTenant
       .from('invitations')
       .select('*', { count: 'exact', head: true })
       .eq('organization_id', organization_id)
@@ -93,7 +102,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const token = crypto.randomUUID();
     const expires_at = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(); // 7 days
 
-    const { data: invite, error: inviteErr } = await supabase
+    const { data: invite, error: inviteErr } = await supabaseTenant
       .from('invitations')
       .insert({
         email: email.trim().toLowerCase(),
