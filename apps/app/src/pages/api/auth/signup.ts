@@ -205,6 +205,15 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       });
 
     if (profileErr) {
+      if (profileErr.code === '23505' || profileErr.message.toLowerCase().includes('unique constraint')) {
+        if (profileErr.message.includes('rut_professional') || profileErr.message.includes('idx_unique_rut_professional_pro')) {
+          return res.status(400).json({ error: 'El RUT ingresado ya está asociado a otra cuenta profesional registrada.' });
+        }
+        if (profileErr.message.includes('username') || profileErr.message.includes('idx_unique_username_lower')) {
+          return res.status(400).json({ error: 'El nombre de usuario ya está en uso. Por favor, elige otro.' });
+        }
+        return res.status(400).json({ error: 'El RUT o el nombre de usuario ya están registrados.' });
+      }
       return res.status(400).json({ error: 'Error al registrar el perfil clínico: ' + profileErr.message });
     }
 
