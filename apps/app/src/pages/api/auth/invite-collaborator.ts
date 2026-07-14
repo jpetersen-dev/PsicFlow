@@ -26,18 +26,23 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   try {
-    // Initialize tenant-scoped client to bypass RLS for this specific clinic
+    // 1. Initialize request-scoped Supabase client propagating user's session & tenant
     const supabaseTenant = createClient(supabaseUrl, supabaseAnonKey, {
-      global: { headers: { 'x-tenant-id': organization_id } },
+      global: { 
+        headers: { 
+          'x-tenant-id': organization_id,
+          'Authorization': `Bearer ${accessToken}`
+        } 
+      },
     });
 
-    // 1. Authenticate user from JWT (auth is global)
-    const { data: { user }, error: authErr } = await supabase.auth.getUser(accessToken);
+    // Authenticate user from global Auth layer
+    const { data: { user }, error: authErr } = await supabaseTenant.auth.getUser(accessToken);
     if (authErr || !user) {
       return res.status(401).json({ error: 'Sesión inválida o expirada.' });
     }
 
-    // 2. Validate user has admin role in this organization (using tenant client)
+    // 2. Validate user has admin role in this organization
     const { data: adminProfile, error: profileErr } = await supabaseTenant
       .from('profiles')
       .select('role_name')
@@ -52,10 +57,19 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       });
     }
 
-    // 3. Plan Limit Verification (maxUsers) (using tenant client)
+    // 3. Plan Limit Verification (maxUsers) using SECURITY DEFINER helpers
+    const { data: planLevel, error: planErr } = await supabaseTenant.rpc('get_organization_plan', {
+      p_organization_id: organization_id
+    });
+
+    if (planErr || !planLevel) {
+      return res.status(400).json({ error: 'No se pudo obtener el plan de la clínica.' });
+    }
+
+    // Get clinic name for template
     const { data: orgData, error: orgErr } = await supabaseTenant
       .from('organizations')
-      .select('name, current_plan')
+      .select('name')
       .eq('id', organization_id)
       .limit(1)
       .single();
@@ -64,15 +78,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(400).json({ error: 'No se pudo obtener la información de la clínica.' });
     }
 
-    const plan = (orgData.current_plan || 'Starter') as PlanLevel;
+    const plan = planLevel as PlanLevel;
     const features = PLAN_FEATURES[plan];
     const maxUsers = features ? features.maxUsers : 1;
 
     // Count existing team members
-    const { count: currentUsersCount, error: countErr } = await supabaseTenant
-      .from('profiles')
-      .select('*', { count: 'exact', head: true })
-      .eq('organization_id', organization_id);
+    const { data: currentUsersCount, error: countErr } = await supabaseTenant.rpc('get_organization_user_count', {
+      p_organization_id: organization_id
+    });
 
     if (countErr) {
       return res.status(400).json({ error: 'Error al verificar capacidad de la clínica.' });

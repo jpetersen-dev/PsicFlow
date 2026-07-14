@@ -47,27 +47,23 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       global: { headers: { 'x-tenant-id': invitation.organization_id } },
     });
 
-    // 2. Plan Limit Verification (maxUsers)
-    const { data: orgData, error: orgErr } = await supabaseTenant
-      .from('organizations')
-      .select('current_plan')
-      .eq('id', invitation.organization_id)
-      .limit(1)
-      .single();
+    // 2. Plan Limit Verification (maxUsers) using SECURITY DEFINER helper to bypass RLS
+    const { data: planLevel, error: planErr } = await supabase.rpc('get_organization_plan', {
+      p_organization_id: invitation.organization_id
+    });
 
-    if (orgErr || !orgData) {
+    if (planErr || !planLevel) {
       return res.status(400).json({ error: 'No se pudo obtener la clínica asociada a la invitación.' });
     }
 
-    const plan = (orgData.current_plan || 'Starter') as PlanLevel;
+    const plan = planLevel as PlanLevel;
     const features = PLAN_FEATURES[plan];
     const maxUsers = features ? features.maxUsers : 1;
 
-    // Count existing team members
-    const { count: currentUsersCount, error: countErr } = await supabaseTenant
-      .from('profiles')
-      .select('*', { count: 'exact', head: true })
-      .eq('organization_id', invitation.organization_id);
+    // Count existing team members using SECURITY DEFINER helper to bypass RLS
+    const { data: currentUsersCount, error: countErr } = await supabase.rpc('get_organization_user_count', {
+      p_organization_id: invitation.organization_id
+    });
 
     if (countErr) {
       return res.status(400).json({ error: 'Error al verificar capacidad de la clínica.' });
