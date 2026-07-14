@@ -3237,7 +3237,10 @@ export default function Perfil() {
                 )}
 
                 {bio && (
-                  <p className="text-xs text-on-surface-variant font-light mt-3 leading-relaxed border-t border-outline-variant/10 pt-3">
+                  <p 
+                    className="text-xs text-on-surface-variant font-light mt-3 leading-relaxed border-t border-outline-variant/10 pt-3"
+                    style={{ whiteSpace: 'pre-line' }}
+                  >
                     {bio}
                   </p>
                 )}
@@ -3247,7 +3250,10 @@ export default function Perfil() {
             {/* Expanded details grid (Quote, specialties, education, languages) */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
               {quote && (
-                <div className="col-span-2 p-4 bg-primary/5 border border-primary/10 rounded-xl italic text-on-surface-variant text-center leading-relaxed">
+                <div 
+                  className="col-span-2 p-4 bg-primary/5 border border-primary/10 rounded-xl italic text-on-surface-variant text-center leading-relaxed"
+                  style={{ whiteSpace: 'pre-line' }}
+                >
                   "{quote}"
                 </div>
               )}
