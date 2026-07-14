@@ -172,7 +172,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           </div>
         `,
         senderName: 'PsicFlow Plataforma',
-        senderEmail: 'no-reply@psicflow.cl'
+        senderEmail: process.env.BREVO_SENDER_EMAIL || 'no-reply@sentidomigrante.com'
       });
       emailSent = emailRes.success;
       if (!emailRes.success) {
