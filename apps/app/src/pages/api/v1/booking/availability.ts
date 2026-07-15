@@ -74,8 +74,12 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
 
     // 3. Query Google Calendar FreeBusy if connected
     if (info.refresh_token && info.calendar_ids && info.calendar_ids.length > 0) {
+      const nextDateObj = new Date(date + 'T12:00:00');
+      nextDateObj.setDate(nextDateObj.getDate() + 1);
+      const nextDate = nextDateObj.toISOString().split('T')[0];
+
       const timeMin = `${date}T00:00:00Z`;
-      const timeMax = `${date}T23:59:59Z`;
+      const timeMax = `${nextDate}T12:00:00Z`;
 
       try {
         const googleBusyResults = await queryFreeBusy(
@@ -91,12 +95,14 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
             const bStart = new Date(block.start);
             const bEnd = new Date(block.end);
 
-            // Convert to minutes of the day in specialist timezone
-            const startLocalStr = bStart.toLocaleTimeString('en-US', { timeZone: tz, hour: '2-digit', minute: '2-digit', hour12: false });
-            const endLocalStr = bEnd.toLocaleTimeString('en-US', { timeZone: tz, hour: '2-digit', minute: '2-digit', hour12: false });
+            // Convert to minutes of the day in specialist timezone using Intl.DateTimeFormat formatToParts (robust to dot vs colon separator differences)
+            const sParts = new Intl.DateTimeFormat('en-US', { timeZone: tz, hour: '2-digit', minute: '2-digit', hour12: false }).formatToParts(bStart);
+            const eParts = new Intl.DateTimeFormat('en-US', { timeZone: tz, hour: '2-digit', minute: '2-digit', hour12: false }).formatToParts(bEnd);
 
-            const [sh, sm] = startLocalStr.split(':').map(Number);
-            const [eh, em] = endLocalStr.split(':').map(Number);
+            const sh = parseInt(sParts.find(p => p.type === 'hour')?.value || '0', 10);
+            const sm = parseInt(sParts.find(p => p.type === 'minute')?.value || '0', 10);
+            const eh = parseInt(eParts.find(p => p.type === 'hour')?.value || '0', 10);
+            const em = parseInt(eParts.find(p => p.type === 'minute')?.value || '0', 10);
 
             const startMin = sh * 60 + sm;
             const endMin = eh * 60 + em;

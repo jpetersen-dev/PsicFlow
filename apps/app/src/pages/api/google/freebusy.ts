@@ -144,8 +144,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           activeCalendars.map((c) => [c.calendar_id, c.calendar_name])
         );
 
+        const nextDateObj = new Date(date + 'T12:00:00');
+        nextDateObj.setDate(nextDateObj.getDate() + 1);
+        const nextDate = nextDateObj.toISOString().split('T')[0];
+
         const timeMin = `${date}T00:00:00Z`;
-        const timeMax = `${date}T23:59:59Z`;
+        const timeMax = `${nextDate}T12:00:00Z`;
 
         try {
           const freeBusyResults = await queryFreeBusy(
@@ -161,8 +165,19 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             for (const block of result.busy) {
               const bStart = new Date(block.start);
               const bEnd = new Date(block.end);
-              const startLocal = bStart.toLocaleTimeString('en-GB', { timeZone: tz, hour: '2-digit', minute: '2-digit', hour12: false });
-              const endLocal = bEnd.toLocaleTimeString('en-GB', { timeZone: tz, hour: '2-digit', minute: '2-digit', hour12: false });
+              
+              // Use formatToParts to guarantee HH:mm formatting independent of OS/Node locale quirks (dot vs colon)
+              const sParts = new Intl.DateTimeFormat('en-US', { timeZone: tz, hour: '2-digit', minute: '2-digit', hour12: false }).formatToParts(bStart);
+              const eParts = new Intl.DateTimeFormat('en-US', { timeZone: tz, hour: '2-digit', minute: '2-digit', hour12: false }).formatToParts(bEnd);
+              
+              const sh = sParts.find(p => p.type === 'hour')?.value || '00';
+              const sm = sParts.find(p => p.type === 'minute')?.value || '00';
+              const eh = eParts.find(p => p.type === 'hour')?.value || '00';
+              const em = eParts.find(p => p.type === 'minute')?.value || '00';
+
+              const startLocal = `${sh}:${sm}`;
+              const endLocal = `${eh}:${em}`;
+
               googleBusy.push({
                 start: startLocal,
                 end: endLocal,
