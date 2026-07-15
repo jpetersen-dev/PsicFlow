@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/router';
 import { usePrivacyMode } from './PrivacyModeProvider';
@@ -45,6 +45,28 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
   const [profile, setProfile] = useState<{ full_name: string; role_name: string } | null>(null);
   const [authChecking, setAuthChecking] = useState(!isNoLayout);
   const [isPatient, setIsPatient] = useState(false);
+  
+  const sidebarRef = useRef<HTMLElement>(null);
+  const menuButtonRef = useRef<HTMLButtonElement>(null);
+
+  // Close sidebar when clicking outside on both desktop and mobile
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (
+        sidebarOpen &&
+        sidebarRef.current &&
+        !sidebarRef.current.contains(event.target as Node) &&
+        menuButtonRef.current &&
+        !menuButtonRef.current.contains(event.target as Node)
+      ) {
+        setSidebarOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [sidebarOpen]);
 
   // Auth session check & listener
   useEffect(() => {
@@ -297,6 +319,7 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
     <div className="min-h-screen bg-bg-primary text-text-primary flex font-sans">
       {/* Sidebar */}
       <aside
+        ref={sidebarRef}
         className={`bg-bg-sidebar border-r border-border-color transition-all duration-300 z-30 flex flex-col fixed inset-y-0 left-0 md:static ${sidebarOpen ? 'w-64' : 'w-0 md:w-20 overflow-hidden'
           }`}
       >
@@ -363,6 +386,7 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
         <header className="h-16 bg-bg-sidebar border-b border-border-color flex items-center justify-between px-6 sticky top-0 z-20">
           <div className="flex items-center gap-4">
             <button
+              ref={menuButtonRef}
               onClick={() => setSidebarOpen(!sidebarOpen)}
               className="text-text-secondary hover:text-text-primary"
             >

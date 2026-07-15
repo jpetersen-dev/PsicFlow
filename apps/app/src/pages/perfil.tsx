@@ -920,7 +920,8 @@ export default function Perfil() {
       const { data: members, error: membersErr } = await supabase
         .from('profiles')
         .select('id, full_name, email, role_name, username')
-        .eq('organization_id', tenantId);
+        .eq('organization_id', tenantId)
+        .neq('role_name', 'paciente');
 
       if (!membersErr && members) {
         setTeamMembers(members);
@@ -941,6 +942,27 @@ export default function Perfil() {
       console.error('Error fetching team or invitations:', err);
     } finally {
       setLoadingTeam(false);
+    }
+  };
+
+  const handleChangePlan = async (orgId: string, newPlan: string) => {
+    try {
+      const { error } = await supabase
+        .from('organizations')
+        .update({ current_plan: newPlan })
+        .eq('id', orgId);
+
+      if (error) throw error;
+      
+      alert(`Plan de la clínica actualizado a ${newPlan}.`);
+      
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        await fetchUserClinics(user.id);
+        window.location.reload();
+      }
+    } catch (err: any) {
+      alert('Error al cambiar el plan: ' + err.message);
     }
   };
 
@@ -2997,9 +3019,21 @@ export default function Perfil() {
                         <tr key={clinicItem.id} className="hover:bg-surface-container-low/30 transition-colors">
                           <td className="py-4 pr-4 font-bold text-on-surface">{org.name || 'Clínica Sin Nombre'}</td>
                           <td className="py-4 pr-4">
-                            <span className="px-2 py-0.5 bg-primary/10 text-primary text-[11px] font-bold rounded">
-                              {org.current_plan || 'Starter'}
-                            </span>
+                            {isOwner ? (
+                              <select
+                                value={org.current_plan || 'Starter'}
+                                onChange={(e) => handleChangePlan(clinicItem.organization_id, e.target.value)}
+                                className="bg-bg-input border border-border-color text-xs text-text-primary rounded px-1.5 py-0.5 focus:outline-none font-bold cursor-pointer"
+                              >
+                                <option value="Starter">Starter</option>
+                                <option value="Pro">Pro</option>
+                                <option value="Enterprise">Enterprise</option>
+                              </select>
+                            ) : (
+                              <span className="px-2 py-0.5 bg-primary/10 text-primary text-[11px] font-bold rounded">
+                                {org.current_plan || 'Starter'}
+                              </span>
+                            )}
                           </td>
                           <td className="py-4 pr-4 text-on-surface-variant capitalize text-xs">
                             {clinicItem.role_name === 'admin_clinica' ? 'Administrador' : clinicItem.role_name}

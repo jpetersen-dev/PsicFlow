@@ -15,12 +15,13 @@ export const NewClinicModal: React.FC<NewClinicModalProps> = ({ isOpen, onClose,
   const [formData, setFormData] = useState({
     clinicName: '',
     profName: '',
-    profRut: ''
+    profRut: '',
+    currentPlan: 'Starter'
   });
 
   if (!isOpen) return null;
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     setFormData(prev => ({ ...prev, [e.target.name]: e.target.value }));
   };
 
@@ -49,7 +50,7 @@ export const NewClinicModal: React.FC<NewClinicModalProps> = ({ isOpen, onClose,
         .from('organizations')
         .insert({
           name: formData.clinicName.trim(),
-          current_plan: 'Starter'
+          current_plan: formData.currentPlan
         })
         .select('id')
         .single();
@@ -197,11 +198,26 @@ export const NewClinicModal: React.FC<NewClinicModalProps> = ({ isOpen, onClose,
             <p className="text-[10px] text-text-secondary mt-1">Ingresa el RUT sin puntos y con guion.</p>
           </div>
 
+          {/* Selector de Plan */}
+          <div>
+            <label className="block text-xs text-text-secondary mb-1 font-medium">Plan de Suscripción *</label>
+            <select
+              name="currentPlan"
+              value={formData.currentPlan}
+              onChange={handleChange}
+              className="w-full bg-bg-input border border-border-color rounded-lg px-3 py-2 text-sm text-text-primary focus:border-border-focus focus:outline-none cursor-pointer"
+            >
+              <option value="Starter">Starter (Hasta 1 usuario)</option>
+              <option value="Pro">Pro (Hasta 5 usuarios, Reseñas)</option>
+              <option value="Enterprise">Enterprise (Portal, Blog, Usuarios ilimitados)</option>
+            </select>
+          </div>
+
           {/* Informacion de Plan */}
           <div className="bg-primary/5 border border-primary/10 rounded-xl p-4 mt-2">
-            <p className="text-xs font-semibold text-accent-primary">¡Bienvenido a PsicFlow!</p>
+            <p className="text-xs font-semibold text-accent-primary">Carga de Créditos Incluidos</p>
             <p className="text-[11px] text-on-surface-variant mt-1 leading-relaxed">
-              La nueva clínica se registrará bajo el plan **Starter** y se le abonarán de manera gratuita:
+              La nueva clínica se registrará y se le abonarán de manera gratuita:
               <br />• **10 Créditos de Notas Clínicas con IA**
               <br />• **5 Créditos de Informes Clínicos con IA**
             </p>

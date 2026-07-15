@@ -5,6 +5,13 @@ import { useRouter } from 'next/router';
 import { supabase } from '../lib/supabaseClient';
 import { Calendar, Clock, ArrowLeft, CheckCircle2, User, ChevronRight, AlertTriangle } from 'lucide-react';
 
+const getAppUrl = (path: string = '') => {
+  const isLocal = typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL || (isLocal ? 'http://localhost:3001' : 'https://app.sentidomigrante.com');
+  const cleanPath = path.startsWith('/') ? path : `/${path}`;
+  return `${appUrl}${cleanPath}`;
+};
+
 export default function PatientPortalBooking() {
   const router = useRouter();
   const [patient, setPatient] = useState<any>(null);
@@ -44,7 +51,7 @@ export default function PatientPortalBooking() {
           setPatient(patData);
 
           // Fetch specialists using our public API
-          const res = await fetch(`/api/v1/booking/specialists?organization_id=${patData.organization_id}`);
+          const res = await fetch(getAppUrl(`/api/v1/booking/specialists?organization_id=${patData.organization_id}`));
           const data = await res.json();
           if (res.ok && data.success) {
             setSpecialists(data.specialists);
@@ -75,7 +82,7 @@ export default function PatientPortalBooking() {
 
       try {
         const res = await fetch(
-          `/api/v1/booking/availability?organization_id=${patient.organization_id}&specialist_id=${selectedSpecialist.id}&date=${selectedDate}`
+          getAppUrl(`/api/v1/booking/availability?organization_id=${patient.organization_id}&specialist_id=${selectedSpecialist.id}&date=${selectedDate}`)
         );
         const data = await res.json();
 
@@ -125,7 +132,7 @@ export default function PatientPortalBooking() {
         },
       };
 
-      const res = await fetch('/api/v1/booking/reserve', {
+      const res = await fetch(getAppUrl('/api/v1/booking/reserve'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),

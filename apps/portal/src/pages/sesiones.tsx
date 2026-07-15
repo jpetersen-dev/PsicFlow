@@ -4,6 +4,13 @@ import Link from 'next/link';
 import { supabase } from '../lib/supabaseClient';
 import { Calendar, Clock, ArrowLeft, CreditCard, CheckCircle2, AlertCircle, RefreshCw, XCircle, Star } from 'lucide-react';
 
+const getAppUrl = (path: string = '') => {
+  const isLocal = typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL || (isLocal ? 'http://localhost:3001' : 'https://app.sentidomigrante.com');
+  const cleanPath = path.startsWith('/') ? path : `/${path}`;
+  return `${appUrl}${cleanPath}`;
+};
+
 export default function PatientSessionsList() {
   const [patient, setPatient] = useState<any>(null);
   const [sessions, setSessions] = useState<any[]>([]);
@@ -76,7 +83,7 @@ export default function PatientSessionsList() {
     setReconciling(reference);
 
     try {
-      const res = await fetch('/api/webhooks/simulate-wise', {
+      const res = await fetch(getAppUrl('/api/webhooks/simulate-wise'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ reference }),
