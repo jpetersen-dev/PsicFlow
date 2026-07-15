@@ -38,6 +38,7 @@ export default function InvitacionRegistro() {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [clinicNameInput, setClinicNameInput] = useState('');
 
   const verifyTokenAndSession = async () => {
     if (!token) return;
@@ -61,15 +62,19 @@ export default function InvitacionRegistro() {
       setInvitation(inviteData);
 
       // Fetch organization name
-      const { data: orgData } = await supabase
-        .from('organizations')
-        .select('name')
-        .eq('id', inviteData.organization_id)
-        .limit(1)
-        .single();
+      if (inviteData.organization_id) {
+        const { data: orgData } = await supabase
+          .from('organizations')
+          .select('name')
+          .eq('id', inviteData.organization_id)
+          .limit(1)
+          .single();
 
-      if (orgData) {
-        setClinicName(orgData.name);
+        if (orgData) {
+          setClinicName(orgData.name);
+        }
+      } else {
+        setClinicName(inviteData.target_plan ? `Alta de Nueva Clínica (${inviteData.target_plan})` : 'Alta de Nueva Clínica');
       }
 
       // 2. Check current session status
@@ -84,7 +89,9 @@ export default function InvitacionRegistro() {
           .eq('user_id', currentSession.user.id);
 
         const profiles = userProfiles || [];
-        const belongsToTargetOrg = profiles.some(p => p.organization_id === inviteData.organization_id);
+        const belongsToTargetOrg = inviteData.organization_id 
+          ? profiles.some(p => p.organization_id === inviteData.organization_id) 
+          : false;
 
         if (belongsToTargetOrg) {
           setIsAlreadyMember(true);
@@ -173,16 +180,17 @@ export default function InvitacionRegistro() {
 
       if (isExistingUserLink) {
         // Link existing doesn't need form details (copies from database)
-      } else if (isGoogle) {
-        payload.full_name = fullName;
-        payload.username = username;
-        payload.rut_professional = rut;
       } else {
         payload.full_name = fullName;
         payload.username = username;
-        payload.email = email;
-        payload.password = password;
         payload.rut_professional = rut;
+        if (!isGoogle) {
+          payload.email = email;
+          payload.password = password;
+        }
+        if (!invitation.organization_id) {
+          payload.clinic_name = clinicNameInput;
+        }
       }
 
       const headers: any = { 'Content-Type': 'application/json' };
@@ -327,6 +335,25 @@ export default function InvitacionRegistro() {
               <div className="p-4 bg-accent-primary/10 border border-accent-primary/20 text-accent-primary text-xs rounded-xl flex items-center gap-2 mb-2 font-medium">
                 <ShieldCheck className="w-4 h-4 shrink-0" />
                 <span>Sesión de Google iniciada como {email}. Completa tus credenciales de PsicFlow para finalizar.</span>
+              </div>
+            )}
+
+            {!invitation.organization_id && (
+              <div className="space-y-1">
+                <label className="text-xs font-semibold text-text-secondary">Nombre de tu Clínica / Consulta *</label>
+                <div className="relative">
+                  <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-text-muted">
+                    <Building2 className="w-4 h-4" />
+                  </span>
+                  <input 
+                    type="text" 
+                    required 
+                    value={clinicNameInput} 
+                    onChange={(e) => setClinicNameInput(e.target.value)}
+                    placeholder="e.g. Centro de Terapia Providencia"
+                    className="w-full bg-bg-input border border-border-color rounded-xl pl-9 pr-3 py-2 text-sm text-text-primary focus:border-border-focus focus:outline-none"
+                  />
+                </div>
               </div>
             )}
 

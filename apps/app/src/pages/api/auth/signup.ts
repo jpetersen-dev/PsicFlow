@@ -20,7 +20,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     password, 
     rut_professional, 
     is_google, 
-    is_link_existing 
+    is_link_existing,
+    clinic_name 
   } = req.body;
 
   if (!token) {
@@ -42,37 +43,40 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(400).json({ error: 'Invitación no encontrada, ya utilizada o expirada.' });
     }
 
-    // Initialize tenant-scoped client to bypass RLS for this specific clinic
-    const supabaseTenant = createClient(supabaseUrl, supabaseAnonKey, {
-      global: { headers: { 'x-tenant-id': invitation.organization_id } },
-    });
+    let organizationId = invitation.organization_id;
 
-    // 2. Plan Limit Verification (maxUsers) using SECURITY DEFINER helper to bypass RLS
-    const { data: planLevel, error: planErr } = await supabase.rpc('get_organization_plan', {
-      p_organization_id: invitation.organization_id
-    });
-
-    if (planErr || !planLevel) {
-      return res.status(400).json({ error: 'No se pudo obtener la clínica asociada a la invitación.' });
-    }
-
-    const plan = planLevel as PlanLevel;
-    const features = PLAN_FEATURES[plan];
-    const maxUsers = features ? features.maxUsers : 1;
-
-    // Count existing team members using SECURITY DEFINER helper to bypass RLS
-    const { data: currentUsersCount, error: countErr } = await supabase.rpc('get_organization_user_count', {
-      p_organization_id: invitation.organization_id
-    });
-
-    if (countErr) {
-      return res.status(400).json({ error: 'Error al verificar capacidad de la clínica.' });
-    }
-
-    if (currentUsersCount !== null && currentUsersCount >= maxUsers) {
-      return res.status(400).json({ 
-        error: `Límite de especialistas alcanzado para el plan ${plan} de esta clínica (${maxUsers} máx).` 
+    if (!organizationId) {
+      if (!clinic_name || !clinic_name.trim()) {
+        return res.status(400).json({ error: 'El nombre de la clínica es obligatorio para dar de alta la organización.' });
+      }
+    } else {
+      // 2. Plan Limit Verification (maxUsers) using SECURITY DEFINER helper to bypass RLS
+      const { data: planLevel, error: planErr } = await supabase.rpc('get_organization_plan', {
+        p_organization_id: organizationId
       });
+
+      if (planErr || !planLevel) {
+        return res.status(400).json({ error: 'No se pudo obtener la clínica asociada a la invitación.' });
+      }
+
+      const plan = planLevel as PlanLevel;
+      const features = PLAN_FEATURES[plan];
+      const maxUsers = features ? features.maxUsers : 1;
+
+      // Count existing team members using SECURITY DEFINER helper to bypass RLS
+      const { data: currentUsersCount, error: countErr } = await supabase.rpc('get_organization_user_count', {
+        p_organization_id: organizationId
+      });
+
+      if (countErr) {
+        return res.status(400).json({ error: 'Error al verificar capacidad de la clínica.' });
+      }
+
+      if (currentUsersCount !== null && currentUsersCount >= maxUsers) {
+        return res.status(400).json({ 
+          error: `Límite de especialistas alcanzado para el plan ${plan} de esta clínica (${maxUsers} máx).` 
+        });
+      }
     }
 
     let authUserId = '';
@@ -191,18 +195,42 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       authUserId = authData.user.id;
     }
 
+    // If organization_id was null, we must insert the new organization first
+    if (!organizationId) {
+      const { data: orgData, error: orgErr } = await supabase
+        .from('organizations')
+        .insert({
+          name: clinic_name.trim(),
+          current_plan: invitation.target_plan || 'Starter'
+        })
+        .select('id')
+        .single();
+
+      if (orgErr || !orgData) {
+        return res.status(400).json({ error: orgErr?.message || 'Error al crear la nueva clínica.' });
+      }
+
+      organizationId = orgData.id;
+    }
+
+    const supabaseTenant = createClient(supabaseUrl, supabaseAnonKey, {
+      global: { headers: { 'x-tenant-id': organizationId } },
+    });
+
     // 3. Create profile in DB
-    const { error: profileErr } = await supabaseTenant
+    const { data: newProfile, error: profileErr } = await supabaseTenant
       .from('profiles')
       .insert({
-        organization_id: invitation.organization_id,
+        organization_id: organizationId,
         user_id: authUserId,
         rut_professional: finalRut,
         full_name: finalFullName,
         role_name: invitation.role_name,
         username: finalUsername,
         email: authEmail || authEmailFromVerify,
-      });
+      })
+      .select('id')
+      .single();
 
     if (profileErr) {
       if (profileErr.code === '23505' || profileErr.message.toLowerCase().includes('unique constraint')) {
@@ -218,6 +246,31 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     // 4. Mark Invitation as used
+
+    // Seed initial credits if this is a brand new organization
+    if (!invitation.organization_id && newProfile?.id) {
+      const { error: ledgerErr } = await supabaseTenant
+        .from('credit_ledger')
+        .insert([
+          {
+            organization_id: organizationId,
+            profile_id: newProfile.id,
+            type_unit: 'NOTA_IA',
+            amount: 10,
+            description: 'Carga inicial gratuita de bienvenida'
+          },
+          {
+            organization_id: organizationId,
+            profile_id: newProfile.id,
+            type_unit: 'INFORME_CLINICO',
+            amount: 5,
+            description: 'Carga inicial gratuita de bienvenida'
+          }
+        ]);
+      if (ledgerErr) {
+        console.error('Error seeding initial credits:', ledgerErr);
+      }
+    }
 
     const { error: updateErr } = await supabaseTenant
       .from('invitations')
@@ -238,7 +291,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         username: finalUsername,
         role: invitation.role_name,
       },
-      organization_id: invitation.organization_id,
+      organization_id: organizationId,
     });
 
   } catch (err: any) {
