@@ -62,9 +62,9 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
         setSidebarOpen(false);
       }
     }
-    document.addEventListener('mousedown', handleClickOutside);
+    document.addEventListener('pointerdown', handleClickOutside);
     return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('pointerdown', handleClickOutside);
     };
   }, [sidebarOpen]);
 
@@ -381,7 +381,14 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
       </aside>
 
       {/* Main Content Area */}
-      <div className="flex-1 flex flex-col min-w-0">
+      <div 
+        className="flex-1 flex flex-col min-w-0"
+        onClick={(e) => {
+          if (sidebarOpen && menuButtonRef.current && !menuButtonRef.current.contains(e.target as Node)) {
+            setSidebarOpen(false);
+          }
+        }}
+      >
         {/* Header */}
         <header className="h-16 bg-bg-sidebar border-b border-border-color flex items-center justify-between px-6 sticky top-0 z-20">
           <div className="flex items-center gap-4">
