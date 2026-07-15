@@ -197,20 +197,16 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     // If organization_id was null, we must insert the new organization first
     if (!organizationId) {
-      const { data: orgData, error: orgErr } = await supabase
-        .from('organizations')
-        .insert({
-          name: clinic_name.trim(),
-          current_plan: invitation.target_plan || 'Starter'
-        })
-        .select('id')
-        .single();
+      const { data: newOrgId, error: orgErr } = await supabase.rpc('create_organization_onboarding', {
+        p_name: clinic_name.trim(),
+        p_plan: invitation.target_plan || 'Starter'
+      });
 
-      if (orgErr || !orgData) {
+      if (orgErr || !newOrgId) {
         return res.status(400).json({ error: orgErr?.message || 'Error al crear la nueva clínica.' });
       }
 
-      organizationId = orgData.id;
+      organizationId = newOrgId;
     }
 
     const supabaseTenant = createClient(supabaseUrl, supabaseAnonKey, {
