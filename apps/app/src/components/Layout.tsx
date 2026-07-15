@@ -45,7 +45,6 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
   const [profile, setProfile] = useState<{ full_name: string; role_name: string } | null>(null);
   const [authChecking, setAuthChecking] = useState(!isNoLayout);
   const [isPatient, setIsPatient] = useState(false);
-  const [userEmail, setUserEmail] = useState('');
   
   const sidebarRef = useRef<HTMLElement>(null);
   const menuButtonRef = useRef<HTMLButtonElement>(null);
@@ -184,10 +183,6 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
         const { data: { session } } = await supabase.auth.getSession();
         if (!session?.user?.id) return;
 
-        if (session.user.email) {
-          setUserEmail(session.user.email);
-        }
-
         // Fetch active profile for this tenant and user
         const { data: profileData, error: profileError } = await supabase
           .from('profiles')
@@ -300,8 +295,7 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
     { name: 'Centro Documentos', href: '/documentos', icon: FileText },
     ...(hasFeature(activePlan, 'reviews') ? [{ name: 'Reseñas Pacientes', href: '/resenas', icon: Star }] : []),
     ...(hasFeature(activePlan, 'blog') ? [{ name: 'Publicaciones', href: '/publicaciones', icon: Newspaper }] : []),
-    { name: 'Mi Perfil', href: '/perfil', icon: User },
-    ...(userEmail === 'jpz.dev.solutions@gmail.com' ? [{ name: 'SaaS Superadmin', href: '/superadmin', icon: ShieldCheck }] : [])
+    { name: 'Mi Perfil', href: '/perfil', icon: User }
   ];
 
   if (authChecking) {
