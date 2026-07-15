@@ -23,7 +23,9 @@ import {
   Settings,
   ShieldCheck,
   Star,
-  Newspaper
+  Newspaper,
+  Crown,
+  CreditCard
 } from 'lucide-react';
 import { supabase } from '../lib/supabaseClient';
 import { NewClinicModal } from './NewClinicModal';
@@ -295,6 +297,7 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
     { name: 'Centro Documentos', href: '/documentos', icon: FileText },
     ...(hasFeature(activePlan, 'reviews') ? [{ name: 'Reseñas Pacientes', href: '/resenas', icon: Star }] : []),
     ...(hasFeature(activePlan, 'blog') ? [{ name: 'Publicaciones', href: '/publicaciones', icon: Newspaper }] : []),
+    { name: 'Plan & Suscripción', href: '/plan', icon: CreditCard },
     { name: 'Mi Perfil', href: '/perfil', icon: User }
   ];
 
@@ -418,12 +421,12 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
                   </select>
                 </div>
                 <button 
-                  onClick={() => setIsNewClinicOpen(true)}
-                  className="p-1.5 bg-bg-input border border-border-color hover:bg-bg-card text-accent-primary hover:text-accent-hover rounded-lg transition-all flex items-center justify-center cursor-pointer"
-                  title="Crear Nueva Clínica"
+                  onClick={() => router.push('/plan')}
+                  className="p-1.5 bg-gradient-to-r from-amber-500/20 to-yellow-500/20 border border-amber-500/40 hover:from-amber-500/30 hover:to-yellow-500/30 text-amber-400 rounded-lg transition-all flex items-center justify-center cursor-pointer shadow-[0_0_8px_rgba(245,158,11,0.1)]"
+                  title="Gestionar Plan y Suscripción (Premium)"
                   type="button"
                 >
-                  <Plus className="w-4 h-4" />
+                  <Crown className="w-4 h-4" />
                 </button>
               </div>
             )}
