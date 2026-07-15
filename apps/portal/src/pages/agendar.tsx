@@ -22,6 +22,53 @@ export default function PatientPortalBooking() {
   const [selectedDate, setSelectedDate] = useState<string>('');
   const [availableSlots, setAvailableSlots] = useState<string[]>([]);
   const [selectedSlot, setSelectedSlot] = useState<string>('');
+  const [patientTimezone, setPatientTimezone] = useState<string>('America/Santiago');
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      setPatientTimezone(Intl.DateTimeFormat().resolvedOptions().timeZone || 'America/Santiago');
+    }
+  }, []);
+
+  const getTranslatedSlot = (slot: string) => {
+    if (!selectedSpecialist || !selectedDate || !patientTimezone) return slot;
+    const specialistTz = selectedSpecialist.timezone || 'America/Santiago';
+    if (specialistTz === patientTimezone) return slot;
+
+    try {
+      const localDate = new Date(`${selectedDate}T${slot}:00`);
+      const tzParts = new Intl.DateTimeFormat('en-US', {
+        timeZone: specialistTz,
+        timeZoneName: 'longOffset'
+      }).formatToParts(localDate);
+      const offsetStr = tzParts.find(p => p.type === 'timeZoneName')?.value || 'GMT';
+      const offsetMatch = offsetStr.match(/GMT([+-]\d{2}):?(\d{2})?/);
+      let isoOffset = 'Z';
+      if (offsetMatch) {
+        const sign = offsetMatch[1];
+        const min = offsetMatch[2] || '00';
+        isoOffset = `${sign}:${min}`;
+      }
+
+      const absoluteDate = new Date(`${selectedDate}T${slot}:00${isoOffset}`);
+      
+      const targetParts = new Intl.DateTimeFormat('en-US', {
+        timeZone: patientTimezone,
+        hour: '2-digit', minute: '2-digit', hour12: false
+      }).formatToParts(absoluteDate);
+      
+      const th = targetParts.find(p => p.type === 'hour')?.value || '00';
+      const tm = targetParts.find(p => p.type === 'minute')?.value || '00';
+      
+      const datePartSpec = new Intl.DateTimeFormat('en-US', { timeZone: specialistTz, day: 'numeric' }).format(absoluteDate);
+      const datePartPat = new Intl.DateTimeFormat('en-US', { timeZone: patientTimezone, day: 'numeric' }).format(absoluteDate);
+      const dayDiff = datePartSpec !== datePartPat ? ' (+1d)' : '';
+
+      return `${th}:${tm}${dayDiff}`;
+    } catch (e) {
+      return slot;
+    }
+  };
 
   // UI States
   const [loading, setLoading] = useState(true);
@@ -293,7 +340,12 @@ export default function PatientPortalBooking() {
 
                 {/* Time Picker */}
                 <div className="space-y-2">
-                  <label className="text-xs font-bold uppercase tracking-wide text-text-secondary block">3. Selecciona la Hora</label>
+                  <div className="flex justify-between items-center">
+                    <label className="text-xs font-bold uppercase tracking-wide text-text-secondary">3. Selecciona la Hora</label>
+                    <span className="text-[10px] text-text-muted bg-bg-secondary border border-border-color px-2 py-0.5 rounded-md font-semibold">
+                      Tu Hora Local: {patientTimezone.split('/').pop()?.replace('_', ' ')}
+                    </span>
+                  </div>
                   {!selectedDate ? (
                     <div className="h-10 flex items-center justify-center border border-dashed border-border-color rounded-xl text-xs text-text-muted bg-bg-secondary/40">
                       Selecciona una fecha primero
@@ -311,6 +363,7 @@ export default function PatientPortalBooking() {
                     <div className="grid grid-cols-3 gap-2 max-h-36 overflow-y-auto no-scrollbar border border-border-color rounded-xl p-2.5 bg-bg-secondary">
                       {availableSlots.map((slot) => {
                         const isSelected = selectedSlot === slot;
+                        const translated = getTranslatedSlot(slot);
                         return (
                           <button
                             key={slot}
@@ -322,7 +375,7 @@ export default function PatientPortalBooking() {
                                 : 'bg-white text-text-primary border-border-color hover:border-accent-primary'
                             }`}
                           >
-                            {slot}
+                            {translated}
                           </button>
                         );
                       })}
@@ -385,10 +438,17 @@ export default function PatientPortalBooking() {
 
                 {selectedSlot && (
                   <div className="space-y-1 pt-2 border-t border-border-color/30">
-                    <p className="text-[10px] text-text-muted font-semibold uppercase tracking-wider">Horario</p>
-                    <p className="font-bold text-text-primary text-xs flex items-center gap-1.5">
-                      <Clock className="w-3.5 h-3.5 text-accent-primary" />
-                      {selectedSlot} ({selectedSpecialist?.timezone || 'GMT-4'})
+                    <p className="text-[10px] text-text-muted font-semibold uppercase tracking-wider">Horario de la Cita</p>
+                    <p className="font-bold text-text-primary text-xs flex flex-col gap-1">
+                      <span className="flex items-center gap-1.5">
+                        <Clock className="w-3.5 h-3.5 text-accent-primary" />
+                        <span>En tu horario: <strong>{getTranslatedSlot(selectedSlot)}</strong></span>
+                      </span>
+                      {selectedSpecialist?.timezone && selectedSpecialist.timezone !== patientTimezone && (
+                        <span className="text-[10px] text-text-secondary ml-5">
+                          En horario del terapeuta: {selectedSlot} ({selectedSpecialist.timezone})
+                        </span>
+                      )}
                     </p>
                   </div>
                 )}
