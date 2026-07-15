@@ -161,10 +161,15 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         .limit(1)
         .maybeSingle();
 
+      // Check if user already exists in auth.users (to handle orphan auth users from failed signups)
+      const { data: authUserExists } = await supabase.rpc('check_auth_user_exists', {
+        p_email: authEmail
+      });
+
       let authData;
       let authErr;
 
-      if (existingProfile) {
+      if (existingProfile || authUserExists) {
         // Authenticate password first
         const authResult = await supabase.auth.signInWithPassword({
           email: authEmail,
@@ -175,7 +180,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
         if (authErr || !authData.user) {
           return res.status(400).json({ 
-            error: 'Este correo ya está registrado. Ingresa la contraseña correcta para vincular la clínica.' 
+            error: 'Este correo ya está registrado en la plataforma. Ingresa la contraseña correcta de tu cuenta para continuar.' 
           });
         }
       } else {
