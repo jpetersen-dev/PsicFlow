@@ -22,45 +22,11 @@ export default function Login() {
   const [showInviteInput, setShowInviteInput] = useState(false);
   const [inviteToken, setInviteToken] = useState('');
 
-  // 2FA States
-  const [show2FA, setShow2FA] = useState(false);
-  const [otpCode, setOtpCode] = useState('');
-  const [verifying2FA, setVerifying2FA] = useState(false);
-  const [pendingSession, setPendingSession] = useState<any>(null);
-  const [otpSent, setOtpSent] = useState(false);
-
-  const sendOTP = async (email: string) => {
-    if (otpSent) return;
-    setOtpSent(true);
-    try {
-      const res = await fetch('/api/auth/send-2fa-otp', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Error al enviar código.');
-    } catch (err: any) {
-      setError('No se pudo enviar el código de verificación: ' + err.message);
-      setOtpSent(false);
-    }
-  };
-
   // Session verification and redirection helper
   useEffect(() => {
     const checkSession = async () => {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return;
-
-      if (session.user.email === 'jpz.dev.solutions@gmail.com') {
-        const isVerified = sessionStorage.getItem('superadmin-2fa-verified') === 'true';
-        if (!isVerified) {
-          setShow2FA(true);
-          setLoading(false);
-          await sendOTP(session.user.email);
-          return;
-        }
-      }
 
       setLoading(true);
       setError('');
@@ -144,14 +110,6 @@ export default function Login() {
         throw new Error(data.error || 'Credenciales inválidas.');
       }
 
-      if (data.user?.email === 'jpz.dev.solutions@gmail.com') {
-        setPendingSession(data.session);
-        setShow2FA(true);
-        setLoading(false);
-        await sendOTP(data.user.email);
-        return;
-      }
-
       // Store Supabase session on client
       const { error: sessionErr } = await supabase.auth.setSession({
         access_token: data.session.access_token,
@@ -171,55 +129,6 @@ export default function Login() {
     } finally {
       setLoading(false);
     }
-  };
-
-  const handleVerify2FA = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!otpCode || verifying2FA) return;
-
-    setVerifying2FA(true);
-    setError('');
-
-    try {
-      const email = 'jpz.dev.solutions@gmail.com';
-      const res = await fetch('/api/auth/verify-2fa-otp', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, code: otpCode }),
-      });
-
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.error || 'Código incorrecto.');
-      }
-
-      // Set verification flag in session storage
-      sessionStorage.setItem('superadmin-2fa-verified', 'true');
-
-      // Now apply the pending session (or existing auth session)
-      if (pendingSession) {
-        const { error: sessionErr } = await supabase.auth.setSession({
-          access_token: pendingSession.access_token,
-          refresh_token: pendingSession.refresh_token
-        });
-        if (sessionErr) throw sessionErr;
-      }
-
-      router.push('/superadmin');
-    } catch (err: any) {
-      setError(err.message || 'Error de verificación.');
-    } finally {
-      setVerifying2FA(false);
-    }
-  };
-
-  const handleCancel2FA = async () => {
-    setShow2FA(false);
-    setOtpCode('');
-    setPendingSession(null);
-    setOtpSent(false);
-    await supabase.auth.signOut();
-    router.reload();
   };
 
   const handleGoogleLogin = async () => {
@@ -403,56 +312,6 @@ export default function Login() {
                 >
                   <span>Validar Código</span>
                   <ArrowRight className="w-4 h-4" />
-                </button>
-              </form>
-            </div>
-          </div>
-        )}
-
-        {/* Modal de Verificación en Dos Pasos (2FA) */}
-        {show2FA && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm transition-all duration-300">
-            <div className="bg-bg-card border border-border-color rounded-3xl p-6 sm:p-8 max-w-sm w-full shadow-2xl relative flex flex-col gap-6 text-on-surface">
-              <div className="flex justify-between items-center border-b border-border-color pb-3">
-                <div className="flex items-center gap-2 text-accent-primary">
-                  <ShieldCheck className="w-5 h-5 animate-pulse" />
-                  <h3 className="text-lg font-bold font-display text-text-primary">Verificación 2FA</h3>
-                </div>
-              </div>
-
-              <p className="text-xs text-text-muted leading-relaxed">
-                Se ha enviado un código de verificación de 6 dígitos al correo de administración central. Introduce el código a continuación para continuar:
-              </p>
-
-              <form onSubmit={handleVerify2FA} className="space-y-4">
-                <div className="space-y-1.5">
-                  <label className="text-xs font-semibold text-text-secondary">Código de 6 dígitos</label>
-                  <input 
-                    type="text" 
-                    required 
-                    maxLength={6}
-                    value={otpCode}
-                    onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, ''))}
-                    placeholder="e.g. 123456"
-                    className="w-full bg-bg-input border border-border-color rounded-xl px-3 py-2.5 text-center text-lg font-bold tracking-widest text-text-primary focus:border-border-focus focus:outline-none placeholder:text-text-muted/65"
-                  />
-                </div>
-
-                <button 
-                  type="submit" 
-                  disabled={verifying2FA || otpCode.length !== 6}
-                  className="w-full bg-accent-primary hover:bg-accent-hover text-bg-primary font-bold py-3 rounded-xl text-sm flex items-center justify-center gap-2 transition-all cursor-pointer shadow-md disabled:opacity-50"
-                >
-                  <span>{verifying2FA ? 'Verificando...' : 'Verificar Código'}</span>
-                  <ArrowRight className="w-4 h-4" />
-                </button>
-
-                <button
-                  type="button"
-                  onClick={handleCancel2FA}
-                  className="w-full py-2 border border-border-color hover:bg-bg-input text-xs font-semibold rounded-lg text-text-secondary transition-all"
-                >
-                  Cancelar / Salir
                 </button>
               </form>
             </div>
