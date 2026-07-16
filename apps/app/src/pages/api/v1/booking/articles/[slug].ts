@@ -34,6 +34,7 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
         title,
         slug,
         description,
+        seo_description,
         content_html,
         category,
         tags,
@@ -46,7 +47,8 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
           full_name,
           specialization,
           bio,
-          logo_url
+          logo_url,
+          seo_description
         )
       `)
       .eq('slug', slug)
