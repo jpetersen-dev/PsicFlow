@@ -12,6 +12,7 @@ export default function EditorPublicacion() {
   const [title, setTitle] = useState('');
   const [slug, setSlug] = useState('');
   const [description, setDescription] = useState('');
+  const [seoDescription, setSeoDescription] = useState('');
   const [contentHtml, setContentHtml] = useState('');
   const [category, setCategory] = useState('Psicología Clínica');
   const [tagsString, setTagsString] = useState('');
@@ -75,6 +76,7 @@ export default function EditorPublicacion() {
             setTitle(article.title);
             setSlug(article.slug);
             setDescription(article.description);
+            setSeoDescription(article.seo_description || '');
             setContentHtml(article.content_html);
             setCategory(article.category);
             setTagsString(article.tags ? article.tags.join(', ') : '');
@@ -136,6 +138,7 @@ export default function EditorPublicacion() {
         title: title.trim(),
         slug: slug.trim(),
         description: description.trim(),
+        seo_description: seoDescription.trim(),
         content_html: contentHtml.trim(),
         category: category.trim(),
         tags,
@@ -335,6 +338,26 @@ export default function EditorPublicacion() {
                   placeholder="ej. Ansiedad, Duelo, Estrés"
                   className="w-full px-3 py-2 bg-bg-input border border-border-color rounded-xl text-sm focus:outline-none focus:border-accent-primary text-text-primary"
                 />
+              </div>
+
+              {/* Extracto SEO */}
+              <div className="space-y-1">
+                <div className="flex justify-between items-center">
+                  <label className="text-xs font-semibold text-text-secondary">Extracto SEO para Google</label>
+                  <span className={`text-[10px] ${seoDescription.length > 160 ? 'text-red-500 font-semibold' : 'text-text-muted'}`}>
+                    {seoDescription.length}/160
+                  </span>
+                </div>
+                <textarea
+                  rows={2}
+                  value={seoDescription}
+                  onChange={(e) => setSeoDescription(e.target.value)}
+                  placeholder="Breve descripción de tu artículo para resultados de Google..."
+                  className={`w-full px-3 py-2 bg-bg-input border rounded-xl text-sm focus:outline-none h-20 resize-none text-text-primary ${seoDescription.length > 160 ? 'border-red-500 focus:border-red-500' : 'border-border-color focus:border-accent-primary'}`}
+                />
+                <p className="text-[10px] text-text-muted">
+                  Breve descripción de tu artículo para resultados de Google (Máx. 160 caracteres). Si lo dejas en blanco, se usará el resumen del artículo.
+                </p>
               </div>
 
               {/* Author Select */}
