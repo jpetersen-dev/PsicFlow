@@ -90,6 +90,7 @@ export default function Perfil() {
   const [specialization, setSpecialization] = useState('');
   const [experience, setExperience] = useState<number>(0);
   const [bio, setBio] = useState('');
+  const [seoDescription, setSeoDescription] = useState('');
   const [timezone, setTimezone] = useState('America/Santiago');
   const [workStartHour, setWorkStartHour] = useState(8);
   const [workEndHour, setWorkEndHour] = useState(20);
@@ -788,6 +789,7 @@ export default function Perfil() {
         if (profData.specialization) setSpecialization(profData.specialization);
         if (profData.experience !== undefined && profData.experience !== null) setExperience(profData.experience);
         if (profData.bio) setBio(profData.bio);
+        setSeoDescription(profData.seo_description || '');
          if (profData.timezone) setTimezone(profData.timezone);
         if (profData.work_start_hour !== undefined && profData.work_start_hour !== null) setWorkStartHour(profData.work_start_hour);
         if (profData.work_end_hour !== undefined && profData.work_end_hour !== null) setWorkEndHour(profData.work_end_hour);
@@ -1419,6 +1421,7 @@ export default function Perfil() {
           specialization,
           experience: Number(experience),
            bio,
+          seo_description: seoDescription.trim(),
           timezone,
           work_start_hour: Number(workStartHour),
           work_end_hour: Number(workEndHour),
@@ -1846,6 +1849,24 @@ export default function Perfil() {
                       className="w-full bg-surface-container-low border border-outline-variant/20 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary/20 focus:outline-none h-28 resize-none" 
                     ></textarea>
                     <p className="text-[10px] text-on-surface-variant text-right">Firma clínica digital activa.</p>
+                  </div>
+
+                  <div className="space-y-2 font-sans">
+                    <div className="flex justify-between items-center">
+                      <label className="font-label-md text-on-surface-variant text-xs">Extracto SEO (Opcional)</label>
+                      <span className={`text-[10px] ${seoDescription.length > 160 ? 'text-red-500 font-semibold' : 'text-on-surface-variant'}`}>
+                        {seoDescription.length}/160
+                      </span>
+                    </div>
+                    <textarea 
+                      value={seoDescription}
+                      onChange={(e) => setSeoDescription(e.target.value)}
+                      placeholder="Breve descripción de tu perfil para aparecer en los resultados de Google..."
+                      className={`w-full bg-surface-container-low border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:outline-none h-20 resize-none ${seoDescription.length > 160 ? 'border-red-500 focus:ring-red-200' : 'border-outline-variant/20 focus:ring-primary/20'}`} 
+                    ></textarea>
+                    <p className="text-[10px] text-on-surface-variant">
+                      Breve descripción de tu perfil para aparecer en los resultados de Google (Máx. 160 caracteres). Si lo dejas en blanco, se usará el inicio de tu biografía.
+                    </p>
                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
