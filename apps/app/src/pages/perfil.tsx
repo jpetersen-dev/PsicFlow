@@ -986,6 +986,50 @@ export default function Perfil() {
     }
   };
 
+  const handleDeleteCollaborator = async (memberId: string, memberName: string) => {
+    const activeClinic = userClinics.find(c => c.organization_id === activeTenantId);
+    if (!activeClinic || activeClinic.role_name !== 'admin_clinica') {
+      alert('No tienes permisos de administrador para realizar esta acción.');
+      return;
+    }
+
+    const confirmDelete = confirm(`¿Estás seguro de que deseas eliminar a "${memberName}" del equipo? Esta acción es irreversible y el colaborador perderá acceso a la clínica.`);
+    if (!confirmDelete) return;
+
+    setLoadingTeam(true);
+    try {
+      const { createClient } = await import('@supabase/supabase-js');
+      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
+      const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
+      
+      const supabaseTenant = createClient(supabaseUrl, supabaseAnonKey, {
+        global: { headers: { 'x-tenant-id': activeTenantId || '' } },
+      });
+
+      const { error } = await supabaseTenant
+        .from('profiles')
+        .delete()
+        .eq('id', memberId);
+
+      if (error) {
+        if (error.code === '23503') {
+          throw new Error('No se puede eliminar a este colaborador porque tiene registros clínicos o sesiones asociadas. Puedes cambiar su rol o contactar a soporte si necesitas desactivarlo.');
+        }
+        throw error;
+      }
+
+      alert(`Colaborador "${memberName}" eliminado correctamente.`);
+      if (activeTenantId) {
+        fetchTeamAndInvitations(activeTenantId);
+      }
+    } catch (err: any) {
+      console.error('Error deleting collaborator:', err);
+      alert('Error al eliminar colaborador: ' + err.message);
+    } finally {
+      setLoadingTeam(false);
+    }
+  };
+
   const handleInviteSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const tid = localStorage.getItem('active-tenant-id');
@@ -3126,6 +3170,7 @@ export default function Perfil() {
                           <th className="pb-3 pr-4">Usuario</th>
                           <th className="pb-3 pr-4">Email</th>
                           <th className="pb-3 pr-4">Rol en Clínica</th>
+                          <th className="pb-3 text-right">Acciones</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-outline-variant/10">
@@ -3144,6 +3189,20 @@ export default function Perfil() {
                               }`}>
                                 {member.role_name === 'admin_clinica' ? 'Administrador' : member.role_name === 'psicologo' ? 'Psicólogo' : member.role_name}
                               </span>
+                            </td>
+                            <td className="py-3 text-right">
+                              {member.id !== profile?.id ? (
+                                <button
+                                  onClick={() => handleDeleteCollaborator(member.id, member.full_name || `@${member.username}`)}
+                                  className="px-2 py-1 text-xs font-semibold text-error hover:underline cursor-pointer inline-flex items-center gap-1"
+                                  type="button"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                  <span>Eliminar</span>
+                                </button>
+                              ) : (
+                                <span className="text-[10px] text-on-surface-variant italic">Tú</span>
+                              )}
                             </td>
                           </tr>
                         ))}
