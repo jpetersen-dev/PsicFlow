@@ -219,6 +219,7 @@ export default function PatientLogin() {
     <>
       <Head>
         <title>Acceso Portal Paciente - Sentido Migrante</title>
+        <meta name="robots" content="noindex, nofollow" />
       </Head>
 
       <div className="min-h-screen bg-[#FCFBF9] flex flex-col justify-center items-center p-4 sm:p-6 font-sans">
