@@ -1,6 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { createClient } from '@supabase/supabase-js';
 import { allowCors } from '../../../../utils/cors';
+import { WebhookService } from '@/lib/webhookService';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
@@ -68,6 +69,18 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
     }
 
     const reservation = reservationList[0];
+
+    // Trigger webhook asynchronously (non-blocking) for appointment.booked
+    WebhookService.trigger('appointment.booked', organization_id, {
+      id: reservation.session_id,
+      patient_name: fullName,
+      patient_email: email.trim().toLowerCase(),
+      date,
+      time: start_time,
+      status: reservation.status_session
+    }).catch((err) => {
+      console.error('[Webhook] Failed to trigger appointment.booked:', err);
+    });
 
     return res.status(200).json({
       success: true,

@@ -133,7 +133,7 @@ export default function Perfil() {
   const [googleMessage, setGoogleMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   // Tab & UI configuration states
-  const [activeMainTab, setActiveMainTab] = useState<'profile' | 'booking' | 'integrations' | 'security' | 'clinics'>('profile');
+  const [activeMainTab, setActiveMainTab] = useState<'profile' | 'booking' | 'integrations' | 'security' | 'clinics' | 'webhooks'>('profile');
   const [activeBookingTab, setActiveBookingTab] = useState<'general' | 'gateways' | 'services'>('general');
   const [activeWiseTab, setActiveWiseTab] = useState<'chf' | 'eur'>('chf');
   const [showStripeSecret, setShowStripeSecret] = useState(false);
@@ -162,16 +162,283 @@ export default function Perfil() {
   const [submittingInvite, setSubmittingInvite] = useState(false);
   const [inviteError, setInviteError] = useState('');
 
+  // Webhooks states
+  const [webhooks, setWebhooks] = useState<any[]>([]);
+  const [loadingWebhooks, setLoadingWebhooks] = useState(false);
+  const [showWebhookForm, setShowWebhookForm] = useState(false);
+  const [webhookUrl, setWebhookUrl] = useState('');
+  const [webhookSecret, setWebhookSecret] = useState('');
+  const [webhookEvents, setWebhookEvents] = useState<string[]>(['appointment.booked']);
+  const [submittingWebhook, setSubmittingWebhook] = useState(false);
+  const [webhookError, setWebhookError] = useState('');
+  const [webhookMessage, setWebhookMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [pinging, setPinging] = useState(false);
+  const [pingResult, setPingResult] = useState<any>(null);
+
+  // API Keys states
+  const [apiKeys, setApiKeys] = useState<any[]>([]);
+  const [loadingKeys, setLoadingKeys] = useState(false);
+  const [newKeyName, setNewKeyName] = useState('');
+  const [generatedPlaintextKey, setGeneratedPlaintextKey] = useState('');
+  const [isKeyModalOpen, setIsKeyModalOpen] = useState(false);
+  const [generatingKey, setGeneratingKey] = useState(false);
+
   const fileInputRef = useRef<HTMLInputElement>(null);
   const imgRef = useRef<HTMLImageElement>(null);
 
   const showBookingTab = hasFeature(organization?.current_plan, 'booking') && profile?.role_name === 'admin_clinica';
+
+  // Fetch webhooks from Supabase
+  const fetchWebhooks = async (tenantId: string) => {
+    setLoadingWebhooks(true);
+    try {
+      const { data, error } = await supabase
+        .from('webhook_subscriptions')
+        .select('*')
+        .eq('organization_id', tenantId)
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        console.error('Error fetching webhooks:', error);
+      } else {
+        setWebhooks(data || []);
+      }
+    } catch (err) {
+      console.error('Unexpected error fetching webhooks:', err);
+    } finally {
+      setLoadingWebhooks(false);
+    }
+  };
+
+  // Toggle active status
+  const handleToggleActive = async (id: string, currentStatus: boolean) => {
+    try {
+      const { error } = await supabase
+        .from('webhook_subscriptions')
+        .update({ is_active: !currentStatus })
+        .eq('id', id);
+
+      if (error) {
+        console.error('Error toggling webhook status:', error);
+        alert('Error al cambiar el estado del webhook: ' + error.message);
+      } else {
+        setWebhooks(prev =>
+          prev.map(wh => wh.id === id ? { ...wh, is_active: !currentStatus } : wh)
+        );
+      }
+    } catch (err: any) {
+      console.error('Unexpected error toggling status:', err);
+      alert('Error inesperado: ' + err.message);
+    }
+  };
+
+  // Delete webhook
+  const handleDeleteWebhook = async (id: string) => {
+    if (!confirm('¿Estás seguro de que deseas eliminar esta suscripción a webhook?')) return;
+    try {
+      const { error } = await supabase
+        .from('webhook_subscriptions')
+        .delete()
+        .eq('id', id);
+
+      if (error) {
+        console.error('Error deleting webhook:', error);
+        alert('Error al eliminar el webhook: ' + error.message);
+      } else {
+        setWebhooks(prev => prev.filter(wh => wh.id !== id));
+      }
+    } catch (err: any) {
+      console.error('Unexpected error deleting webhook:', err);
+      alert('Error inesperado: ' + err.message);
+    }
+  };
+
+  // Create new webhook subscription
+  const handleCreateWebhook = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setWebhookError('');
+    setWebhookMessage(null);
+
+    if (!webhookUrl.startsWith('https://')) {
+      setWebhookError('La URL del webhook debe comenzar con https:// por razones de seguridad.');
+      return;
+    }
+
+    if (webhookEvents.length === 0) {
+      setWebhookError('Debes seleccionar al menos un evento para suscribirte.');
+      return;
+    }
+
+    const tid = localStorage.getItem('active-tenant-id') || activeTenantId || organization?.id;
+    if (!tid) {
+      setWebhookError('No hay una clínica activa seleccionada.');
+      return;
+    }
+
+    setSubmittingWebhook(true);
+    try {
+      const { data, error } = await supabase
+        .from('webhook_subscriptions')
+        .insert({
+          organization_id: tid,
+          url: webhookUrl.trim(),
+          secret: webhookSecret.trim() || null,
+          events: webhookEvents,
+          is_active: true
+        })
+        .select()
+        .single();
+
+      if (error) {
+        console.error('Error creating webhook:', error);
+        setWebhookError(`Error al guardar: ${error.message}`);
+      } else {
+        setWebhookUrl('');
+        setWebhookSecret('');
+        setWebhookEvents(['appointment.booked']);
+        setShowWebhookForm(false);
+        setPingResult(null);
+        setWebhookMessage({ type: 'success', text: 'Webhook registrado exitosamente.' });
+        if (data) {
+          setWebhooks(prev => [data, ...prev]);
+        }
+      }
+    } catch (err: any) {
+      console.error('Unexpected error creating webhook:', err);
+      setWebhookError(err.message || 'Error inesperado al guardar.');
+    } finally {
+      setSubmittingWebhook(false);
+    }
+  };
+
+  // Ping webhook connection
+  const handlePingWebhook = async (urlToTest: string, secretToTest?: string) => {
+    setPinging(true);
+    setPingResult(null);
+    try {
+      const response = await fetch('/api/webhooks/ping', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          url: urlToTest.trim(),
+          secret: secretToTest?.trim() || undefined
+        })
+      });
+
+      const data = await response.json();
+      setPingResult(data);
+      if (data.success) {
+        setWebhookMessage({ type: 'success', text: `Prueba de conexión exitosa (HTTP ${data.status}).` });
+      } else {
+        setWebhookMessage({ type: 'error', text: `Fallo en la prueba de conexión: ${data.error}` });
+      }
+    } catch (err: any) {
+      console.error('Error testing webhook connection:', err);
+      setPingResult({
+        success: false,
+        error: err.message || 'Error de red.'
+      });
+      setWebhookMessage({ type: 'error', text: 'Error de red al intentar conectar.' });
+    } finally {
+      setPinging(false);
+    }
+  };
+
+  // Fetch API Keys
+  const fetchApiKeys = async (tenantId: string) => {
+    setLoadingKeys(true);
+    try {
+      const headers = await getAuthHeaders();
+      const res = await fetch('/api/integrations/keys', { headers });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setApiKeys(data.keys || []);
+      } else {
+        console.error('Error fetching API keys:', data.error);
+      }
+    } catch (err) {
+      console.error('Unexpected error fetching API keys:', err);
+    } finally {
+      setLoadingKeys(false);
+    }
+  };
+
+  // Generate new API Key
+  const handleGenerateApiKey = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newKeyName.trim()) return;
+
+    setGeneratingKey(true);
+    try {
+      const headers = await getAuthHeaders();
+      const res = await fetch('/api/integrations/keys', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ name: newKeyName.trim() }),
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setGeneratedPlaintextKey(data.key.plaintext_key);
+        setIsKeyModalOpen(true);
+        setNewKeyName('');
+        const tid = localStorage.getItem('active-tenant-id') || activeTenantId || organization?.id;
+        if (tid) fetchApiKeys(tid);
+      } else {
+        alert('Error al generar la API Key: ' + (data.error || 'Intenta nuevamente'));
+      }
+    } catch (err: any) {
+      console.error('Error generating API key:', err);
+      alert('Error de red al generar la API Key.');
+    } finally {
+      setGeneratingKey(false);
+    }
+  };
+
+  // Delete/Revoke API Key
+  const handleDeleteApiKey = async (id: string) => {
+    if (!confirm('¿Estás seguro de que deseas revocar esta API Key? Los sistemas externos que la utilicen perderán acceso de inmediato.')) return;
+
+    try {
+      const headers = await getAuthHeaders();
+      const res = await fetch(`/api/integrations/keys?id=${id}`, {
+        method: 'DELETE',
+        headers,
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setApiKeys(prev => prev.filter(k => k.id !== id));
+      } else {
+        alert('Error al revocar la API Key: ' + (data.error || 'Intenta nuevamente'));
+      }
+    } catch (err: any) {
+      console.error('Error deleting API key:', err);
+      alert('Error de red al revocar la API Key.');
+    }
+  };
 
   useEffect(() => {
     if (activeMainTab === 'booking' && !showBookingTab && organization && profile) {
       setActiveMainTab('profile');
     }
   }, [organization, profile, activeMainTab, showBookingTab]);
+
+  // Load webhooks when tab changes
+  useEffect(() => {
+    const tid = localStorage.getItem('active-tenant-id') || activeTenantId || organization?.id;
+    if (activeMainTab === 'webhooks' && tid) {
+      fetchWebhooks(tid);
+    }
+  }, [activeMainTab, activeTenantId, organization?.id]);
+
+  // Load API Keys when integrations tab is selected
+  useEffect(() => {
+    const tid = localStorage.getItem('active-tenant-id') || activeTenantId || organization?.id;
+    if (activeMainTab === 'integrations' && tid) {
+      fetchApiKeys(tid);
+    }
+  }, [activeMainTab, activeTenantId, organization?.id]);
 
   // Load toggles from localStorage
   useEffect(() => {
@@ -1529,6 +1796,19 @@ export default function Perfil() {
             >
               <Building2 className="w-4 h-4" />
               <span>Clínicas Asignadas</span>
+            </button>
+
+            <button
+              onClick={() => setActiveMainTab('webhooks')}
+              className={`flex items-center gap-2 px-4 py-2.5 text-sm font-semibold rounded-lg transition-all whitespace-nowrap cursor-pointer ${
+                activeMainTab === 'webhooks'
+                  ? 'bg-primary/10 text-primary shadow-sm'
+                  : 'text-on-surface-variant hover:text-on-surface hover:bg-surface-container-low'
+              }`}
+              type="button"
+            >
+              <Unplug className="w-4 h-4" />
+              <span>Webhooks</span>
             </button>
           </nav>
         </div>
@@ -2940,6 +3220,161 @@ export default function Perfil() {
                 </button>
               </form>
             </section>
+
+            {/* Column 3c: API Keys Management (12/12 width) */}
+            <section className="col-span-12 bg-surface-container-lowest rounded-xl p-8 shadow-[0px_4px_12px_rgba(0,0,0,0.03)] border border-outline-variant/10 mt-6 flex flex-col gap-6">
+              <div>
+                <h3 className="font-headline-sm text-headline-sm text-on-surface font-bold flex items-center gap-2 border-b border-outline-variant/25 pb-3">
+                  <Lock className="w-5 h-5 text-primary" />
+                  <span>Desarrolladores & API Keys</span>
+                </h3>
+                <p className="text-body-sm text-on-surface-variant text-sm mt-2">
+                  Genera claves de API seguras para conectar formularios de contacto externos, CRM propios, o consultar la disponibilidad de tus terapeutas mediante integraciones personalizadas.
+                </p>
+              </div>
+
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+                {/* Generador de llaves */}
+                <form onSubmit={handleGenerateApiKey} className="lg:col-span-4 space-y-4">
+                  <h4 className="text-xs font-bold text-primary uppercase tracking-wide">Generar Nueva Clave</h4>
+                  <div className="space-y-3">
+                    <div>
+                      <label className="block text-[11px] font-semibold text-on-surface-variant mb-1">Nombre de la Integración</label>
+                      <input
+                        type="text"
+                        placeholder="Ej. Formulario Webflow, n8n webhook"
+                        value={newKeyName}
+                        onChange={(e) => setNewKeyName(e.target.value)}
+                        className="w-full bg-surface-container-low border border-outline-variant/20 rounded-lg px-3 py-2 text-xs focus:ring-1 focus:ring-primary focus:outline-none"
+                        required
+                      />
+                    </div>
+                    <button
+                      type="submit"
+                      disabled={generatingKey || !newKeyName.trim()}
+                      className="w-full bg-primary text-on-primary hover:bg-primary-container font-bold py-2.5 rounded-lg text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer shadow-sm disabled:opacity-50"
+                    >
+                      {generatingKey ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4 stroke-[3]" />}
+                      <span>{generatingKey ? 'Generando...' : 'Generar API Key'}</span>
+                    </button>
+                  </div>
+                </form>
+
+                {/* Listado de llaves */}
+                <div className="lg:col-span-8 space-y-4">
+                  <h4 className="text-xs font-bold text-primary uppercase tracking-wide">Claves Activas</h4>
+                  <div className="border border-outline-variant/10 rounded-xl overflow-hidden bg-surface-container-low">
+                    <div className="overflow-x-auto font-sans">
+                      <table className="w-full border-collapse text-left text-xs">
+                        <thead>
+                          <tr className="bg-surface-container-high border-b border-outline-variant/15 text-on-surface-variant font-semibold">
+                            <th className="p-3">Nombre</th>
+                            <th className="p-3">Vista Previa</th>
+                            <th className="p-3">Creada</th>
+                            <th className="p-3">Último Uso</th>
+                            <th className="p-3 text-right">Acción</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-outline-variant/10 text-on-surface">
+                          {apiKeys.map((k) => (
+                            <tr key={k.id} className="hover:bg-surface-container-medium/30 transition-colors">
+                              <td className="p-3 font-semibold">{k.name}</td>
+                              <td className="p-3 font-mono text-[11px] text-on-surface-variant">{k.key_preview}</td>
+                              <td className="p-3 text-on-surface-variant">
+                                {new Date(k.created_at).toLocaleDateString('es-CL', {
+                                  day: '2-digit',
+                                  month: '2-digit',
+                                  year: 'numeric',
+                                })}
+                              </td>
+                              <td className="p-3 text-on-surface-variant">
+                                {k.last_used_at 
+                                  ? new Date(k.last_used_at).toLocaleDateString('es-CL', {
+                                      day: '2-digit',
+                                      month: '2-digit',
+                                      year: 'numeric',
+                                      hour: '2-digit',
+                                      minute: '2-digit'
+                                    })
+                                  : 'Nunca'
+                                }
+                              </td>
+                              <td className="p-3 text-right">
+                                <button
+                                  onClick={() => handleDeleteApiKey(k.id)}
+                                  className="text-error hover:bg-error/10 p-1.5 rounded-lg transition-colors cursor-pointer"
+                                  title="Revocar clave"
+                                  type="button"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                              </td>
+                            </tr>
+                          ))}
+                          {apiKeys.length === 0 && !loadingKeys && (
+                            <tr>
+                              <td colSpan={5} className="p-6 text-center text-on-surface-variant text-xs">
+                                No tienes API Keys generadas. Crea una a la izquierda para empezar a integrar.
+                              </td>
+                            </tr>
+                          )}
+                          {loadingKeys && (
+                            <tr>
+                              <td colSpan={5} className="p-6 text-center text-on-surface-variant text-xs flex items-center justify-center gap-2">
+                                <RefreshCw className="w-4 h-4 animate-spin text-primary" />
+                                <span>Cargando llaves...</span>
+                              </td>
+                            </tr>
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </section>
+          </div>
+        )}
+
+        {/* Modal de API Key Generada */}
+        {isKeyModalOpen && (
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[9999] p-4">
+            <div className="bg-surface-container-lowest border border-outline-variant/30 rounded-xl p-6 max-w-md w-full shadow-2xl animate-in fade-in zoom-in-95 duration-200">
+              <div className="flex items-center gap-3 text-warning mb-4">
+                <ShieldAlert className="w-8 h-8 shrink-0" />
+                <div>
+                  <h4 className="font-bold text-on-surface text-lg">Guarda tu API Key</h4>
+                  <p className="text-xs text-on-surface-variant">Por tu seguridad, no podremos mostrártela de nuevo.</p>
+                </div>
+              </div>
+              <p className="text-xs text-on-surface-variant mb-4">
+                Copia esta clave ahora y guárdala en un lugar seguro. Perderás el acceso a ella una vez que cierres esta ventana.
+              </p>
+              <div className="bg-surface-container-low border border-outline-variant/30 rounded-lg p-3 flex items-center justify-between gap-3 mb-6 font-mono text-xs select-all break-all text-primary font-bold">
+                <span>{generatedPlaintextKey}</span>
+                <button
+                  onClick={() => {
+                    navigator.clipboard.writeText(generatedPlaintextKey);
+                    alert('¡API Key copiada al portapapeles!');
+                  }}
+                  className="bg-primary/10 hover:bg-primary/20 text-primary p-2 rounded-lg shrink-0 transition-all cursor-pointer"
+                  title="Copiar al portapapeles"
+                  type="button"
+                >
+                  <Check className="w-4 h-4" />
+                </button>
+              </div>
+              <button
+                onClick={() => {
+                  setIsKeyModalOpen(false);
+                  setGeneratedPlaintextKey('');
+                }}
+                className="w-full bg-primary text-on-primary hover:bg-primary-container font-bold py-2.5 rounded-lg text-xs transition-all cursor-pointer"
+                type="button"
+              >
+                Entendido, la he guardado
+              </button>
+            </div>
           </div>
         )}
 
@@ -3292,6 +3727,315 @@ export default function Perfil() {
                 )}
               </section>
             )}
+          </div>
+        )}
+
+        {activeMainTab === 'webhooks' && (
+          <div className="space-y-6">
+            {/* Header / Info Section */}
+            <div className="bg-surface-container-lowest rounded-xl p-8 shadow-[0px_4px_12px_rgba(0,0,0,0.03)] border border-outline-variant/10">
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-outline-variant/25 pb-4 mb-6">
+                <div>
+                  <h3 className="font-headline-sm text-headline-sm text-on-surface font-bold flex items-center gap-2">
+                    <Unplug className="w-5 h-5 text-primary" />
+                    <span>Webhooks Salientes (Outgoing Webhooks)</span>
+                  </h3>
+                  <p className="text-body-sm text-on-surface-variant text-sm mt-1">
+                    Configura endpoints HTTP POST para recibir notificaciones en tiempo real cuando ocurren eventos en tu clínica.
+                  </p>
+                </div>
+                {!showWebhookForm && (
+                  <button
+                    onClick={() => {
+                      setShowWebhookForm(true);
+                      setWebhookError('');
+                      setWebhookMessage(null);
+                      setPingResult(null);
+                    }}
+                    className="flex items-center gap-2 px-4 py-2.5 bg-[#0d5c56] text-white text-sm font-semibold rounded-xl cursor-pointer hover:bg-[#0d5c56] focus:bg-[#0d5c56] hover:scale-100 active:scale-100 transition-none transform-none select-none border-none outline-none shadow-none"
+                    type="button"
+                  >
+                    <Plus className="w-4 h-4" />
+                    <span>Registrar Webhook</span>
+                  </button>
+                )}
+              </div>
+
+              {/* Success/Error Message Banners */}
+              {webhookMessage && (
+                <div className={`mb-6 p-4 rounded-xl border flex items-start gap-2.5 text-sm ${
+                  webhookMessage.type === 'success'
+                    ? 'bg-success-bg border-success/15 text-success'
+                    : 'bg-error-bg border-error/15 text-error'
+                }`}>
+                  <Info className="w-4 h-4 shrink-0 mt-0.5" />
+                  <div className="flex-1">
+                    <span className="font-semibold">{webhookMessage.type === 'success' ? 'Éxito: ' : 'Error: '}</span>
+                    <span>{webhookMessage.text}</span>
+                  </div>
+                  <button onClick={() => setWebhookMessage(null)} className="text-xs font-semibold hover:underline">Cerrar</button>
+                </div>
+              )}
+
+              {/* Form Card (Collapsible) */}
+              {showWebhookForm && (
+                <div className="bg-surface-container-low border border-outline-variant/20 rounded-2xl p-6 mb-6 space-y-6">
+                  <h4 className="font-headline-sm text-base text-on-surface font-bold">Registrar Nuevo Webhook</h4>
+                  
+                  {webhookError && (
+                    <div className="bg-error/10 border border-error/20 p-3 rounded-xl flex items-start gap-2 text-xs text-error">
+                      <Info className="w-4 h-4 shrink-0 mt-0.5" />
+                      <span>{webhookError}</span>
+                    </div>
+                  )}
+
+                  <form onSubmit={handleCreateWebhook} className="space-y-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {/* URL input */}
+                      <div className="space-y-1.5">
+                        <label className="text-xs font-semibold text-on-surface-variant">URL de Destino (HTTPS)</label>
+                        <input
+                          type="url"
+                          required
+                          value={webhookUrl}
+                          onChange={(e) => setWebhookUrl(e.target.value)}
+                          placeholder="https://tu-servidor.com/webhook"
+                          className="w-full bg-surface-container-lowest border border-outline-variant/35 rounded-xl px-3 py-2.5 text-sm text-on-surface focus:border-primary focus:outline-none placeholder:text-on-surface-variant/50"
+                        />
+                      </div>
+
+                      {/* Secret input */}
+                      <div className="space-y-1.5">
+                        <label className="text-xs font-semibold text-on-surface-variant">Clave Secreta de Firma (Opcional)</label>
+                        <input
+                          type="text"
+                          value={webhookSecret}
+                          onChange={(e) => setWebhookSecret(e.target.value)}
+                          placeholder="Firma HMAC-SHA256 (dejar vacío si no se requiere)"
+                          className="w-full bg-surface-container-lowest border border-outline-variant/35 rounded-xl px-3 py-2.5 text-sm text-on-surface focus:border-primary focus:outline-none placeholder:text-on-surface-variant/50"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Events Selector */}
+                    <div className="space-y-2">
+                      <label className="text-xs font-semibold text-on-surface-variant block">Eventos Suscritos</label>
+                      <div className="flex flex-wrap gap-3">
+                        <label className="flex items-center gap-3 bg-primary/10 border border-primary/20 rounded-xl px-4 py-3 cursor-pointer select-none">
+                          <input
+                            type="checkbox"
+                            checked={webhookEvents.includes('appointment.booked')}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setWebhookEvents(prev => [...prev, 'appointment.booked']);
+                              } else {
+                                setWebhookEvents(prev => prev.filter(ev => ev !== 'appointment.booked'));
+                              }
+                            }}
+                            className="accent-primary w-4 h-4 cursor-pointer"
+                          />
+                          <div>
+                            <span className="text-sm font-semibold text-primary block">appointment.booked</span>
+                            <span className="text-xs text-on-surface-variant">Se dispara cuando un paciente agenda una cita exitosamente.</span>
+                          </div>
+                          <span className="ml-auto bg-primary text-white text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider">Prioritario</span>
+                        </label>
+                      </div>
+                    </div>
+
+                    {/* Connection Ping / Test Panel */}
+                    <div className="bg-surface-container-lowest border border-outline-variant/10 rounded-xl p-4 space-y-3">
+                      <div className="flex justify-between items-center">
+                        <div>
+                          <span className="text-xs font-semibold text-on-surface block">Prueba de Conexión</span>
+                          <span className="text-[11px] text-on-surface-variant">Envía un payload de prueba (ping) a la URL ingresada antes de guardar.</span>
+                        </div>
+                        <button
+                          type="button"
+                          disabled={pinging || !webhookUrl.startsWith('https://')}
+                          onClick={() => handlePingWebhook(webhookUrl, webhookSecret)}
+                          className="px-4 py-2 bg-surface-container-high hover:bg-surface-container-highest text-on-surface text-xs font-semibold rounded-xl cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5"
+                        >
+                          {pinging ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Globe className="w-3.5 h-3.5" />}
+                          <span>Probar Conexión (Ping)</span>
+                        </button>
+                      </div>
+
+                      {/* Ping result detail */}
+                      {pingResult && (
+                        <div className={`p-3 rounded-lg border text-xs ${
+                          pingResult.success
+                            ? 'bg-success/5 border-success/15 text-on-surface'
+                            : 'bg-error/5 border-error/15 text-error'
+                        }`}>
+                          {pingResult.success ? (
+                            <div className="space-y-1">
+                              <p className="font-semibold text-success flex items-center gap-1">
+                                <Check className="w-3.5 h-3.5" />
+                                <span>Conexión exitosa. El servidor respondió con estado HTTP {pingResult.status}.</span>
+                              </p>
+                              {pingResult.responseBody && (
+                                <p className="text-[11px] text-on-surface-variant bg-surface-container-low p-2 rounded font-mono break-all">
+                                  Respuesta: {pingResult.responseBody}
+                                </p>
+                              )}
+                            </div>
+                          ) : (
+                            <p className="font-semibold flex items-center gap-1">
+                              <Info className="w-3.5 h-3.5" />
+                              <span>Fallo en la conexión: {pingResult.error}</span>
+                            </p>
+                          )}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Form actions */}
+                    <div className="flex justify-end gap-3 border-t border-outline-variant/10 pt-4">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowWebhookForm(false);
+                          setWebhookUrl('');
+                          setWebhookSecret('');
+                          setWebhookError('');
+                          setPingResult(null);
+                        }}
+                        className="px-5 py-2.5 bg-surface-container-high hover:bg-surface-container-highest text-on-surface text-sm font-semibold rounded-xl cursor-pointer"
+                        disabled={submittingWebhook}
+                      >
+                        Cancelar
+                      </button>
+                      <button
+                        type="submit"
+                        className="px-5 py-2.5 bg-[#0d5c56] text-white text-sm font-semibold rounded-xl cursor-pointer hover:bg-[#0d5c56] focus:bg-[#0d5c56] hover:scale-100 active:scale-100 transition-none transform-none disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                        disabled={submittingWebhook}
+                      >
+                        {submittingWebhook ? (
+                          <>
+                            <RefreshCw className="w-4 h-4 animate-spin" />
+                            <span>Guardando...</span>
+                          </>
+                        ) : (
+                          <span>Guardar Webhook</span>
+                        )}
+                      </button>
+                    </div>
+                  </form>
+                </div>
+              )}
+
+              {/* Webhooks List */}
+              {loadingWebhooks ? (
+                <div className="flex flex-col items-center justify-center py-12 gap-3 text-on-surface-variant">
+                  <RefreshCw className="w-8 h-8 animate-spin text-primary" />
+                  <span className="text-sm">Cargando suscripciones a webhooks...</span>
+                </div>
+              ) : webhooks.length === 0 ? (
+                <div className="text-center py-16 bg-surface-container-low border border-dashed border-outline-variant/35 rounded-2xl space-y-4">
+                  <div className="mx-auto w-12 h-12 rounded-full bg-surface-container-high flex items-center justify-center text-on-surface-variant">
+                    <Unplug className="w-6 h-6 text-on-surface-variant/70" />
+                  </div>
+                  <div className="max-w-sm mx-auto space-y-1">
+                    <p className="text-sm font-semibold text-on-surface">No hay webhooks configurados</p>
+                    <p className="text-xs text-on-surface-variant">
+                      Registra una URL HTTPS para recibir notificaciones cuando se agenden nuevas citas en tu clínica.
+                    </p>
+                  </div>
+                  {!showWebhookForm && (
+                    <button
+                      onClick={() => setShowWebhookForm(true)}
+                      className="px-4 py-2 bg-[#0d5c56] text-white text-xs font-semibold rounded-xl cursor-pointer hover:bg-[#0d5c56] focus:bg-[#0d5c56] hover:scale-100 active:scale-100 transition-none transform-none select-none border-none outline-none shadow-none"
+                      type="button"
+                    >
+                      Registrar Primer Webhook
+                    </button>
+                  )}
+                </div>
+              ) : (
+                <div className="overflow-x-auto border border-outline-variant/15 rounded-2xl">
+                  <table className="min-w-full divide-y divide-outline-variant/15 text-left text-sm">
+                    <thead className="bg-surface-container-low text-xs font-semibold text-on-surface-variant uppercase">
+                      <tr>
+                        <th className="px-6 py-4">URL de Destino</th>
+                        <th className="px-6 py-4">Eventos</th>
+                        <th className="px-6 py-4 text-center">Firma (HMAC)</th>
+                        <th className="px-6 py-4 text-center">Estado</th>
+                        <th className="px-6 py-4 text-right">Acciones</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-outline-variant/10 bg-surface-container-lowest">
+                      {webhooks.map((wh) => (
+                        <tr key={wh.id} className="hover:bg-surface-container-low/20 transition-colors">
+                          <td className="px-6 py-4">
+                            <span className="font-mono text-xs break-all block max-w-md">{wh.url}</span>
+                            <span className="text-[10px] text-on-surface-variant block mt-0.5">
+                              Creado el {new Date(wh.created_at).toLocaleDateString()}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4">
+                            <div className="flex flex-wrap gap-1">
+                              {wh.events.map((ev: string) => (
+                                <span
+                                  key={ev}
+                                  className="bg-primary/10 text-primary text-[11px] font-semibold px-2 py-0.5 rounded-lg border border-primary/15"
+                                >
+                                  {ev}
+                                </span>
+                              ))}
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 text-center">
+                            {wh.secret ? (
+                              <span className="bg-surface-container-high text-on-surface text-[10px] font-semibold px-2 py-0.5 rounded-md" title={wh.secret}>
+                                Activado
+                              </span>
+                            ) : (
+                              <span className="text-on-surface-variant/40 text-xs">-</span>
+                            )}
+                          </td>
+                          <td className="px-6 py-4 text-center">
+                            <button
+                              onClick={() => handleToggleActive(wh.id, wh.is_active)}
+                              className="relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2"
+                              style={{ backgroundColor: wh.is_active ? 'var(--color-primary)' : 'var(--color-outline-variant)' }}
+                              type="button"
+                              aria-label="Toggle active status"
+                            >
+                              <span
+                                className="pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out"
+                                style={{ transform: wh.is_active ? 'translateX(20px)' : 'translateX(0px)' }}
+                              />
+                            </button>
+                          </td>
+                          <td className="px-6 py-4 text-right">
+                            <div className="flex justify-end gap-2">
+                              <button
+                                onClick={() => handlePingWebhook(wh.url, wh.secret)}
+                                className="p-2 text-on-surface-variant hover:text-primary hover:bg-surface-container-low rounded-lg transition-colors cursor-pointer"
+                                title="Probar conexión (Ping)"
+                                type="button"
+                                disabled={pinging}
+                              >
+                                <Globe className="w-4 h-4" />
+                              </button>
+                              <button
+                                onClick={() => handleDeleteWebhook(wh.id)}
+                                className="p-2 text-on-surface-variant hover:text-error hover:bg-error/10 rounded-lg transition-colors cursor-pointer"
+                                title="Eliminar Webhook"
+                                type="button"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
           </div>
         )}
         {/* Footer */}
