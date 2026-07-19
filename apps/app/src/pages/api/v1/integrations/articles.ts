@@ -42,6 +42,7 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
         category,
         tags,
         image_url,
+        secondary_image_url,
         reading_time,
         published_at,
         created_at,

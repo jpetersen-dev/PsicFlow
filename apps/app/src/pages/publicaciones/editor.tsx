@@ -15,8 +15,17 @@ export default function EditorPublicacion() {
   const [seoDescription, setSeoDescription] = useState('');
   const [contentHtml, setContentHtml] = useState('');
   const [category, setCategory] = useState('Psicología Clínica');
+  const [categories, setCategories] = useState<string[]>([
+    'Psicología Clínica',
+    'Psicología',
+    'Relaciones',
+    'Bienestar',
+    'Salud Mental'
+  ]);
+  const [isCustomCategory, setIsCustomCategory] = useState(false);
   const [tagsString, setTagsString] = useState('');
   const [imageUrl, setImageUrl] = useState('');
+  const [secondaryImageUrl, setSecondaryImageUrl] = useState('');
   const [status, setStatus] = useState<'draft' | 'published'>('draft');
   const [authorId, setAuthorId] = useState('');
 
@@ -53,6 +62,20 @@ export default function EditorPublicacion() {
         // Default author is the logged in user
         setAuthorId(profile.id);
 
+        // Fetch existing categories from organization's articles
+        const { data: catData, error: catError } = await supabase
+          .from('articles')
+          .select('category')
+          .eq('organization_id', profile.organization_id);
+
+        const defaultCats = ['Psicología Clínica', 'Psicología', 'Relaciones', 'Bienestar', 'Salud Mental'];
+        let initialUniqueCats = [...defaultCats];
+
+        if (!catError && catData) {
+          const existingCats = catData.map((a: any) => a.category).filter(Boolean);
+          initialUniqueCats = Array.from(new Set([...defaultCats, ...existingCats]));
+        }
+
         // Fetch other profiles in the same organization
         const { data: profiles, error: pError } = await supabase
           .from('profiles')
@@ -81,11 +104,22 @@ export default function EditorPublicacion() {
             setCategory(article.category);
             setTagsString(article.tags ? article.tags.join(', ') : '');
             setImageUrl(article.image_url || '');
+            setSecondaryImageUrl(article.secondary_image_url || '');
             setStatus(article.status);
             setAuthorId(article.author_id || profile.id);
             setAutoSlug(false); // Disable auto-slug when editing an existing article
+
+            // Ensure article's category is in the dropdown categories list
+            if (article.category && !initialUniqueCats.includes(article.category)) {
+              initialUniqueCats.push(article.category);
+            }
           }
+        } else {
+          // If creating a new article, set default category to the first one available
+          setCategory(initialUniqueCats[0] || 'Psicología Clínica');
         }
+
+        setCategories(initialUniqueCats);
       } catch (err: any) {
         alert('Error al inicializar el editor: ' + err.message);
       } finally {
@@ -143,6 +177,7 @@ export default function EditorPublicacion() {
         category: category.trim(),
         tags,
         image_url: imageUrl.trim() || null,
+        secondary_image_url: secondaryImageUrl.trim() || null,
         reading_time: readingTime,
         status,
         updated_at: new Date().toISOString()
@@ -259,7 +294,10 @@ export default function EditorPublicacion() {
               <article 
                 className="prose prose-sm max-w-none text-bluegrey-700 leading-relaxed font-sans space-y-4"
                 dangerouslySetInnerHTML={{ 
-                  __html: contentHtml || '<p class="text-gray-400 italic">No hay contenido redactado aún.</p>' 
+                  __html: (contentHtml || '<p class="text-gray-400 italic">No hay contenido redactado aún.</p>').replaceAll(
+                    '[URL_IMAGEN_SECUNDARIA]',
+                    secondaryImageUrl || 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7'
+                  )
                 }} 
               />
             </div>
@@ -314,18 +352,45 @@ export default function EditorPublicacion() {
 
               {/* Category */}
               <div className="space-y-1">
-                <label className="text-xs font-semibold text-text-secondary">Categoría *</label>
-                <select
-                  value={category}
-                  onChange={(e) => setCategory(e.target.value)}
-                  className="w-full px-3 py-2 bg-bg-input border border-border-color rounded-xl text-sm focus:outline-none focus:border-accent-primary text-text-primary font-medium"
-                >
-                  <option value="Psicología Clínica">Psicología Clínica</option>
-                  <option value="Psicología">Psicología</option>
-                  <option value="Relaciones">Relaciones</option>
-                  <option value="Bienestar">Bienestar</option>
-                  <option value="Salud Mental">Salud Mental</option>
-                </select>
+                <div className="flex justify-between items-center">
+                  <label className="text-xs font-semibold text-text-secondary">Categoría *</label>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsCustomCategory(!isCustomCategory);
+                      if (isCustomCategory) {
+                        setCategory(categories[0] || 'Psicología Clínica');
+                      } else {
+                        setCategory('');
+                      }
+                    }}
+                    className="text-[10px] text-accent-primary hover:text-accent-hover font-bold cursor-pointer transition-colors"
+                  >
+                    {isCustomCategory ? 'Seleccionar existente' : '+ Crear nueva'}
+                  </button>
+                </div>
+                {isCustomCategory ? (
+                  <input
+                    required
+                    type="text"
+                    value={category}
+                    onChange={(e) => setCategory(e.target.value)}
+                    placeholder="ej. Terapia de Aceptación"
+                    className="w-full px-3 py-2 bg-bg-input border border-border-color rounded-xl text-sm focus:outline-none focus:border-accent-primary text-text-primary font-medium"
+                  />
+                ) : (
+                  <select
+                    value={category}
+                    onChange={(e) => setCategory(e.target.value)}
+                    className="w-full px-3 py-2 bg-bg-input border border-border-color rounded-xl text-sm focus:outline-none focus:border-accent-primary text-text-primary font-medium"
+                  >
+                    {categories.map((cat) => (
+                      <option key={cat} value={cat}>
+                        {cat}
+                      </option>
+                    ))}
+                  </select>
+                )}
               </div>
 
               {/* Tags */}
@@ -387,6 +452,26 @@ export default function EditorPublicacion() {
                   placeholder="https://images.unsplash.com/..."
                   className="w-full px-3 py-2 bg-bg-input border border-border-color rounded-xl text-sm focus:outline-none focus:border-accent-primary text-text-primary"
                 />
+              </div>
+
+              {/* Secondary Image URL */}
+              <div className="space-y-1">
+                <label className="text-xs font-semibold text-text-secondary">URL de Imagen Secundaria</label>
+                <input
+                  type="text"
+                  value={secondaryImageUrl}
+                  onChange={(e) => setSecondaryImageUrl(e.target.value)}
+                  placeholder="https://images.unsplash.com/..."
+                  className="w-full px-3 py-2 bg-bg-input border border-border-color rounded-xl text-sm focus:outline-none focus:border-accent-primary text-text-primary"
+                />
+                <p className="text-[10px] text-text-muted mt-1 leading-relaxed">
+                  Usa el marcador <code>[URL_IMAGEN_SECUNDARIA]</code> en tu cuerpo HTML para colocar esta ilustración donde prefieras.
+                </p>
+                {secondaryImageUrl && (
+                  <div className="mt-2 relative w-full h-24 rounded-xl overflow-hidden border border-border-color bg-bg-input flex items-center justify-center p-1.5 shadow-sm">
+                    <img src={secondaryImageUrl} alt="Miniatura Secundaria" className="h-full object-contain rounded-lg" />
+                  </div>
+                )}
               </div>
 
               {/* Status */}
