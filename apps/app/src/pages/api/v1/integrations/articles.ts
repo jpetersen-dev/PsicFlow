@@ -46,9 +46,12 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
         reading_time,
         published_at,
         created_at,
+        og_title,
+        og_description,
         author:author_id (
           id,
           full_name,
+          role_name,
           specialization,
           bio,
           logo_url

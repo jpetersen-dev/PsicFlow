@@ -28,6 +28,9 @@ export default function EditorPublicacion() {
   const [secondaryImageUrl, setSecondaryImageUrl] = useState('');
   const [status, setStatus] = useState<'draft' | 'published'>('draft');
   const [authorId, setAuthorId] = useState('');
+  const [jsonLd, setJsonLd] = useState('');
+  const [ogTitle, setOgTitle] = useState('');
+  const [ogDescription, setOgDescription] = useState('');
 
   // UI / Logic states
   const [loading, setLoading] = useState(false);
@@ -36,6 +39,8 @@ export default function EditorPublicacion() {
   const [previewMode, setPreviewMode] = useState(false);
   const [specialists, setSpecialists] = useState<any[]>([]);
   const [organizationId, setOrganizationId] = useState('');
+  const [currentUserRole, setCurrentUserRole] = useState('');
+  const [orgName, setOrgName] = useState('');
 
   // Fetch specialists of the organization to list as author options
   useEffect(() => {
@@ -51,16 +56,29 @@ export default function EditorPublicacion() {
         // Get user's profile
         const { data: profile, error: profErr } = await supabase
           .from('profiles')
-          .select('id, organization_id')
+          .select('id, organization_id, role_name')
           .eq('user_id', user.id)
           .single();
 
         if (profErr || !profile) throw new Error('No se pudo cargar el perfil del especialista.');
 
         setOrganizationId(profile.organization_id);
+        setCurrentUserRole(profile.role_name || '');
         
         // Default author is the logged in user
         setAuthorId(profile.id);
+
+        // Fetch organization name
+        if (profile.organization_id) {
+          const { data: orgData, error: orgErr } = await supabase
+            .from('organizations')
+            .select('name')
+            .eq('id', profile.organization_id)
+            .single();
+          if (!orgErr && orgData) {
+            setOrgName(orgData.name);
+          }
+        }
 
         // Fetch existing categories from organization's articles
         const { data: catData, error: catError } = await supabase
@@ -106,7 +124,10 @@ export default function EditorPublicacion() {
             setImageUrl(article.image_url || '');
             setSecondaryImageUrl(article.secondary_image_url || '');
             setStatus(article.status);
-            setAuthorId(article.author_id || profile.id);
+            setAuthorId(article.author_id || 'ORG');
+            setJsonLd(article.json_ld || '');
+            setOgTitle(article.og_title || '');
+            setOgDescription(article.og_description || '');
             setAutoSlug(false); // Disable auto-slug when editing an existing article
 
             // Ensure article's category is in the dropdown categories list
@@ -168,7 +189,7 @@ export default function EditorPublicacion() {
 
       const articlePayload = {
         organization_id: organizationId,
-        author_id: authorId || null,
+        author_id: authorId === 'ORG' ? null : (authorId || null),
         title: title.trim(),
         slug: slug.trim(),
         description: description.trim(),
@@ -180,6 +201,9 @@ export default function EditorPublicacion() {
         secondary_image_url: secondaryImageUrl.trim() || null,
         reading_time: readingTime,
         status,
+        json_ld: jsonLd.trim() || null,
+        og_title: ogTitle.trim() || null,
+        og_description: ogDescription.trim() || null,
         updated_at: new Date().toISOString()
       };
 
@@ -434,12 +458,61 @@ export default function EditorPublicacion() {
                   className="w-full px-3 py-2 bg-bg-input border border-border-color rounded-xl text-sm focus:outline-none focus:border-accent-primary text-text-primary font-medium"
                 >
                   <option value="">Seleccione autor...</option>
+                  {currentUserRole === 'admin_clinica' && orgName && (
+                    <option value="ORG">{orgName} (Organización)</option>
+                  )}
                   {specialists.map((spec) => (
                     <option key={spec.id} value={spec.id}>
                       {spec.full_name} ({spec.role_name === 'admin_clinica' ? 'Director' : 'Psicólogo'})
                     </option>
                   ))}
                 </select>
+              </div>
+
+              {/* JSON-LD Schema Markup */}
+              <div className="space-y-1">
+                <label className="text-xs font-semibold text-text-secondary">JSON-LD (Schema Markup)</label>
+                <textarea
+                  rows={4}
+                  value={jsonLd}
+                  onChange={(e) => setJsonLd(e.target.value)}
+                  placeholder='{"@context": "https://schema.org", ...}'
+                  className="w-full px-3 py-2 bg-bg-input border border-border-color rounded-xl text-xs font-mono focus:outline-none focus:border-accent-primary text-text-primary resize-y"
+                />
+                <p className="text-[10px] text-text-muted">
+                  Pegue el código JSON-LD base para SEO. Se inyectará y validará dinámicamente el autor al mostrarse.
+                </p>
+              </div>
+
+              {/* Open Graph (Redes Sociales) */}
+              <div className="space-y-2 border border-border-color/60 rounded-xl p-3">
+                <span className="text-[10px] font-bold text-text-secondary uppercase tracking-wider block">
+                  Open Graph (Redes Sociales)
+                </span>
+                
+                {/* OG Title */}
+                <div className="space-y-1">
+                  <label className="text-xs font-semibold text-text-secondary block">Título OG</label>
+                  <input
+                    type="text"
+                    value={ogTitle}
+                    onChange={(e) => setOgTitle(e.target.value)}
+                    placeholder="Título para redes sociales..."
+                    className="w-full px-3 py-2 bg-bg-input border border-border-color rounded-xl text-xs focus:outline-none focus:border-accent-primary text-text-primary font-medium"
+                  />
+                </div>
+
+                {/* OG Description */}
+                <div className="space-y-1">
+                  <label className="text-xs font-semibold text-text-secondary block">Descripción OG</label>
+                  <textarea
+                    rows={2}
+                    value={ogDescription}
+                    onChange={(e) => setOgDescription(e.target.value)}
+                    placeholder="Descripción para redes sociales..."
+                    className="w-full px-3 py-2 bg-bg-input border border-border-color rounded-xl text-xs focus:outline-none focus:border-accent-primary text-text-primary resize-none h-16 font-sans"
+                  />
+                </div>
               </div>
 
               {/* Image Cover URL */}

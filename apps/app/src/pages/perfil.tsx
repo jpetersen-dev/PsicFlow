@@ -2224,14 +2224,63 @@ export default function Perfil() {
                     </div>
                   </div>
 
-                  <div className="space-y-2">
-                    <label className="font-label-md text-on-surface-variant text-xs">Clínica Asociada (Tenant Actual)</label>
-                    <input 
-                      type="text" 
-                      disabled
-                      value={organization ? organization.name : 'Cargando clínica...'} 
-                      className="w-full bg-surface-container-low/50 border border-outline-variant/15 rounded-lg px-3 py-2 text-sm text-on-surface-variant cursor-not-allowed" 
-                    />
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="space-y-2">
+                      <label className="font-label-md text-on-surface-variant text-xs">Clínica Asociada (Tenant Actual)</label>
+                      <input 
+                        type="text" 
+                        disabled
+                        value={organization ? organization.name : 'Cargando clínica...'} 
+                        className="w-full bg-surface-container-low/50 border border-outline-variant/15 rounded-lg px-3 py-2 text-sm text-on-surface-variant cursor-not-allowed" 
+                      />
+                    </div>
+                    {profile?.role_name === 'admin_clinica' && (
+                      <div className="space-y-2">
+                        <label className="font-label-md text-on-surface-variant text-xs font-semibold block font-sans">Logo Corporativo de la Clínica</label>
+                        <div className="flex items-center gap-4">
+                          {organization?.logo_url ? (
+                            <img src={organization.logo_url} alt="Logo Clínica" className="w-12 h-12 object-contain border border-outline-variant/20 rounded bg-white p-1" />
+                          ) : (
+                            <div className="w-12 h-12 bg-surface-container-low border border-outline-variant/20 rounded flex items-center justify-center text-[10px] text-on-surface-variant font-semibold">Sin Logo</div>
+                          )}
+                          <input 
+                            type="file" 
+                            accept="image/*"
+                            onChange={async (e) => {
+                              const file = e.target.files?.[0];
+                              if (!file) return;
+                              try {
+                                const ext = file.name.split('.').pop();
+                                const activeTenant = localStorage.getItem('active-tenant-id');
+                                const path = `${profile.user_id}/clinic_logo_${activeTenant}.${ext}`;
+                                
+                                // Upload clinic logo to storage avatars bucket
+                                const { error: uploadErr } = await supabase.storage
+                                  .from('avatars')
+                                  .upload(path, file, { upsert: true });
+                                if (uploadErr) throw uploadErr;
+                                
+                                const { data } = supabase.storage.from('avatars').getPublicUrl(path);
+                                const url = data.publicUrl + `?t=${Date.now()}`;
+                                
+                                // Update database column in organizations table
+                                const { error: updateErr } = await supabase
+                                  .from('organizations')
+                                  .update({ logo_url: url })
+                                  .eq('id', activeTenant);
+                                if (updateErr) throw updateErr;
+                                
+                                alert('Logo corporativo subido y actualizado con éxito.');
+                                await fetchProfileAndOrg();
+                              } catch (err: any) {
+                                alert('Error al subir logo corporativo: ' + err.message);
+                              }
+                            }}
+                            className="text-xs text-on-surface-variant file:mr-4 file:py-1.5 file:px-3 file:rounded-md file:border-0 file:text-xs file:font-semibold file:bg-primary/10 file:text-primary hover:file:bg-primary/20"
+                          />
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
 
