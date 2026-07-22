@@ -1,8 +1,8 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { createClient } from '@supabase/supabase-js';
-import { validateApiKey } from '../../../../utils/authIntegration';
-import { verifyFeatureForOrganization } from '../../../../utils/planFeatures';
-import { allowCors } from '../../../../utils/cors';
+import { validateApiKey } from '../../../../../utils/authIntegration';
+import { verifyFeatureForOrganization } from '../../../../../utils/planFeatures';
+import { allowCors } from '../../../../../utils/cors';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
