@@ -163,12 +163,12 @@ export default function PatientPortalHome() {
                       </a>
                     ) : (
                       <div className="text-center space-y-2">
-                        <p className="text-[11px] text-[#78716C] font-medium">Por favor completa tu transferencia Wise para confirmar.</p>
+                        <p className="text-[11px] text-[#78716C] font-medium">Por favor completa el pago de tu cita para confirmar.</p>
                         <Link
                           href="/sesiones"
-                          className="w-full md:w-auto px-5 py-3 bg-yellow-500 hover:bg-yellow-600 text-white font-bold text-xs rounded-xl flex items-center justify-center gap-2 transition-all shadow-sm"
+                          className="w-full md:w-auto px-5 py-3 bg-[#1A3020] hover:bg-[#2c4f35] text-white font-bold text-xs rounded-xl flex items-center justify-center gap-2 transition-all shadow-sm"
                         >
-                          Ver Detalles de Pago
+                          Pagar Sesión
                         </Link>
                       </div>
                     )}

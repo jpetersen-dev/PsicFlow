@@ -56,16 +56,11 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
     const activeGateways = (gateways || []).map(g => {
       const publicCreds: Record<string, any> = {};
       
-      // Filter credentials: only expose public keys or configuration (hide secrets!)
       if (g.credentials) {
-        if (g.provider === 'stripe') {
-          publicCreds.publicKey = g.credentials.publicKey || g.credentials.public_key || null;
-        } else if (g.provider === 'mercadopago') {
-          publicCreds.publicKey = g.credentials.publicKey || g.credentials.public_key || null;
-        } else if (g.provider === 'dlocal_go') {
-          publicCreds.publicKey = g.credentials.publicKey || g.credentials.public_key || null;
+        if (g.provider === 'lemonsqueezy') {
+          publicCreds.storeId = g.credentials.storeId || null;
+          publicCreds.variantId = g.credentials.variantId || null;
         }
-        // Wise/manual transfers usually have bank details already in booking_settings or public fields
       }
 
       return {

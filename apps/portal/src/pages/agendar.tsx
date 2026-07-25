@@ -12,6 +12,13 @@ const getAppUrl = (path: string = '') => {
   return `${appUrl}${cleanPath}`;
 };
 
+const getLandingUrl = (path: string = '') => {
+  const isLocal = typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
+  const landingUrl = process.env.NEXT_PUBLIC_LANDING_URL || (isLocal ? 'http://localhost:3000' : 'https://sentidomigrante.com');
+  const cleanPath = path.startsWith('/') ? path : `/${path}`;
+  return `${landingUrl}${cleanPath}`;
+};
+
 export default function PatientPortalBooking() {
   const router = useRouter();
   const [patient, setPatient] = useState<any>(null);
@@ -224,22 +231,21 @@ export default function PatientPortalBooking() {
         <div className="bg-yellow-50 border border-yellow-200 rounded-2xl p-6 text-left space-y-4">
           <h3 className="font-bold text-yellow-800 text-sm flex items-center gap-1.5">
             <AlertTriangle className="w-4 h-4" />
-            <span>Instrucciones de Pago Requeridas</span>
+            <span>Pago Requerido para Confirmación</span>
           </h3>
           <p className="text-xs text-yellow-800 leading-relaxed">
-            Completa la transferencia bancaria en Wise indicando el siguiente código de referencia exacto en el concepto de la transferencia para que el sistema libere y confirme tu cita en Google Calendar de manera definitiva:
+            Para confirmar tu cita de manera definitiva y agendar el bloque en el calendario del especialista, completa el pago seguro en la pasarela de Lemon Squeezy:
           </p>
-          <div className="flex items-center justify-between bg-white px-4 py-3 border border-yellow-300 rounded-xl">
-            <span className="font-mono font-bold text-sm text-yellow-900 tracking-wide">
-              {reservationResult.transaction_id}
-            </span>
-            <Link 
-              href="/sesiones" 
-              className="text-xs font-bold text-accent-primary hover:text-accent-hover flex items-center gap-1"
+          <div className="flex flex-col sm:flex-row items-center gap-4">
+            <a
+              href={getLandingUrl(`/api/checkout-redirect?reference=${reservationResult.transaction_id}`)}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="w-full text-center py-3 bg-[#1A3020] hover:bg-[#2c4f35] text-white font-bold text-xs rounded-xl transition-all shadow-sm flex items-center justify-center gap-1.5 cursor-pointer text-white decoration-none font-sans font-semibold"
             >
-              <span>Ir a pagar / Simular pago</span>
-              <ChevronRight className="w-3.5 h-3.5" />
-            </Link>
+              <span>Proceder al Pago</span>
+              <ChevronRight className="w-4 h-4 text-white" />
+            </a>
           </div>
         </div>
 
@@ -462,7 +468,7 @@ export default function PatientPortalBooking() {
             </div>
 
             <div className="bg-accent-primary/5 border border-accent-primary/10 rounded-xl p-4 text-[10px] text-text-secondary leading-relaxed">
-              * El espacio reservado se mantendrá bloqueado durante 15 minutos en espera del pago. Pasado este tiempo se liberará automáticamente si no se ha recibido el webhook de Wise.
+              * El espacio reservado se mantendrá bloqueado durante 15 minutos en espera del pago. Pasado este tiempo se liberará automáticamente si no se ha recibido la confirmación de pago.
             </div>
           </div>
         </form>

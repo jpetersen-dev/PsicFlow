@@ -77,30 +77,11 @@ export default function PatientSessionsList() {
     fetchSessions();
   }, []);
 
-  // Quick Action to simulate Wise Payment Webhook!
-  const handleSimulatePayment = async (reference: string) => {
-    if (!confirm(`¿Quieres simular el pago por transferencia de Wise para la referencia ${reference}?`)) return;
-    setReconciling(reference);
-
-    try {
-      const res = await fetch(getAppUrl('/api/webhooks/simulate-wise'), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ reference }),
-      });
-
-      const data = await res.json();
-      if (res.ok && data.success) {
-        alert('¡Simulación de transferencia procesada con éxito! La cita ahora está confirmada.');
-        await fetchSessions(); // Reload
-      } else {
-        alert(`Error al simular pago: ${data.error || 'Intenta nuevamente'}`);
-      }
-    } catch (err: any) {
-      alert(`Error de red: ${err.message}`);
-    } finally {
-      setReconciling(null);
-    }
+  const getLandingUrl = (path: string = '') => {
+    const isLocal = typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
+    const landingUrl = process.env.NEXT_PUBLIC_LANDING_URL || (isLocal ? 'http://localhost:3000' : 'https://sentidomigrante.com');
+    const cleanPath = path.startsWith('/') ? path : `/${path}`;
+    return `${landingUrl}${cleanPath}`;
   };
 
   const handleSaveReview = async () => {
@@ -276,20 +257,19 @@ export default function PatientSessionsList() {
                     )}
                     {!isCancelled && isPending && (
                       <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-4 text-left max-w-sm space-y-3">
-                        <p className="text-[11px] text-yellow-800 leading-relaxed">
-                          Para confirmar la cita, realiza una transferencia en Wise ingresando el siguiente código de referencia exacto en el concepto de pago:
+                        <p className="text-[11px] text-yellow-800 leading-relaxed font-medium">
+                          Para confirmar la cita, completa el pago en la pasarela segura de Lemon Squeezy:
                         </p>
                         <div className="flex items-center justify-between gap-4">
-                          <span className="font-mono font-bold text-xs bg-white px-2 py-1 border border-yellow-300 rounded text-yellow-800">
-                            {sess.transaction_id || 'SM-PENDING'}
-                          </span>
-                          <button
-                            onClick={() => handleSimulatePayment(sess.transaction_id)}
-                            disabled={reconciling !== null}
-                            className="px-3 py-1 bg-yellow-500 hover:bg-yellow-600 text-white font-bold text-[10px] rounded transition-all shadow-sm"
+                          <a
+                            href={getLandingUrl(`/api/checkout-redirect?reference=${sess.transaction_id}`)}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="w-full text-center px-4 py-2 bg-[#1A3020] hover:bg-[#2c4f35] text-white font-bold text-xs rounded-xl transition-all shadow-sm flex items-center justify-center gap-1.5 cursor-pointer text-white decoration-none font-sans"
                           >
-                            {reconciling === sess.transaction_id ? 'Conciliando...' : 'Simular Transferencia'}
-                          </button>
+                            <CreditCard className="w-4 h-4 text-white" />
+                            <span>Proceder al Pago</span>
+                          </a>
                         </div>
                       </div>
                     )}
@@ -297,7 +277,7 @@ export default function PatientSessionsList() {
                     {!isCancelled && sess.status_payment === 'Pagado' && (
                       <div className="flex items-center gap-1.5 text-xs text-green-700 font-semibold bg-green-50 px-3 py-1.5 border border-green-100 rounded-xl">
                         <CheckCircle2 className="w-4 h-4 text-green-600" />
-                        <span>Pago Conciliado vía Wise</span>
+                        <span>Pago Confirmado</span>
                       </div>
                     )}
                   </div>

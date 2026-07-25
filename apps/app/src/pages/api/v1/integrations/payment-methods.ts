@@ -64,12 +64,9 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
       const publicCreds: Record<string, any> = {};
       
       if (g.credentials) {
-        if (g.provider === 'stripe') {
-          publicCreds.publicKey = g.credentials.publicKey || g.credentials.public_key || null;
-        } else if (g.provider === 'mercadopago') {
-          publicCreds.publicKey = g.credentials.publicKey || g.credentials.public_key || null;
-        } else if (g.provider === 'dlocal_go') {
-          publicCreds.publicKey = g.credentials.publicKey || g.credentials.public_key || null;
+        if (g.provider === 'lemonsqueezy') {
+          publicCreds.storeId = g.credentials.storeId || null;
+          publicCreds.variantId = g.credentials.variantId || null;
         }
       }
 

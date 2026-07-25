@@ -50,31 +50,12 @@ export default function Perfil() {
   const [termsText, setTermsText] = useState('');
   const [sandboxMode, setSandboxMode] = useState(false);
   
-  // Wise details
-  const [wiseChfLink, setWiseChfLink] = useState('');
-  const [wiseChfIban, setWiseChfIban] = useState('');
-  const [wiseChfBic, setWiseChfBic] = useState('');
-  const [wiseChfHolder, setWiseChfHolder] = useState('');
-  const [wiseChfBank, setWiseChfBank] = useState('');
-  const [wiseChfAddress, setWiseChfAddress] = useState('');
-
-  const [wiseEurLink, setWiseEurLink] = useState('');
-  const [wiseEurIban, setWiseEurIban] = useState('');
-  const [wiseEurBic, setWiseEurBic] = useState('');
-  const [wiseEurHolder, setWiseEurHolder] = useState('');
-  const [wiseEurBank, setWiseEurBank] = useState('');
-  const [wiseEurAddress, setWiseEurAddress] = useState('');
-
-  // Gateway Toggles & Credentials
-  const [wiseActive, setWiseActive] = useState(false);
-  
-  const [stripeActive, setStripeActive] = useState(false);
-  const [stripePublicKey, setStripePublicKey] = useState('');
-  const [stripeSecretKey, setStripeSecretKey] = useState('');
-
-  const [mpActive, setMpActive] = useState(false);
-  const [mpPublicKey, setMpPublicKey] = useState('');
-  const [mpSecretKey, setMpSecretKey] = useState('');
+  // Lemon Squeezy Credentials
+  const [lsActive, setLsActive] = useState(false);
+  const [lsStoreId, setLsStoreId] = useState('');
+  const [lsVariantId, setLsVariantId] = useState('');
+  const [lsApiKey, setLsApiKey] = useState('');
+  const [lsWebhookSecret, setLsWebhookSecret] = useState('');
   const [organization, setOrganization] = useState<any>(null);
   const [userClinics, setUserClinics] = useState<any[]>([]);
   
@@ -135,9 +116,8 @@ export default function Perfil() {
   // Tab & UI configuration states
   const [activeMainTab, setActiveMainTab] = useState<'profile' | 'booking' | 'integrations' | 'security' | 'clinics' | 'webhooks'>('profile');
   const [activeBookingTab, setActiveBookingTab] = useState<'general' | 'gateways' | 'services'>('general');
-  const [activeWiseTab, setActiveWiseTab] = useState<'chf' | 'eur'>('chf');
-  const [showStripeSecret, setShowStripeSecret] = useState(false);
-  const [showMpSecret, setShowMpSecret] = useState(false);
+  const [showLsApiKey, setShowLsApiKey] = useState(false);
+  const [showLsWebhookSecret, setShowLsWebhookSecret] = useState(false);
 
   // Services states
   const [services, setServices] = useState<any[]>([]);
@@ -1095,25 +1075,6 @@ export default function Perfil() {
         setBookingCurrency(bookData.currency || 'CLP');
         setTermsText(bookData.terms_text || '');
         setSandboxMode(bookData.sandbox_mode || false);
-        
-        const links = bookData.payment_links || {};
-        setWiseChfLink(links.CH || '');
-        setWiseEurLink(links.DE || '');
-        
-        const bank = bookData.bank_transfer_details || {};
-        const chBank = bank.CH || {};
-        setWiseChfIban(chBank.iban || '');
-        setWiseChfBic(chBank.bic || '');
-        setWiseChfHolder(chBank.holder || '');
-        setWiseChfBank(chBank.bankName || '');
-        setWiseChfAddress(chBank.address || '');
-
-        const deBank = bank.DE || {};
-        setWiseEurIban(deBank.iban || '');
-        setWiseEurBic(deBank.bic || '');
-        setWiseEurHolder(deBank.holder || '');
-        setWiseEurBank(deBank.bankName || '');
-        setWiseEurAddress(deBank.address || '');
       }
 
       // Get payment gateways
@@ -1124,25 +1085,19 @@ export default function Perfil() {
 
       if (!gatewaysError && gatewaysData) {
         // Reset states
-        setWiseActive(false);
-        setStripeActive(false);
-        setStripePublicKey('');
-        setStripeSecretKey('');
-        setMpActive(false);
-        setMpPublicKey('');
-        setMpSecretKey('');
+        setLsActive(false);
+        setLsStoreId('');
+        setLsVariantId('');
+        setLsApiKey('');
+        setLsWebhookSecret('');
 
         gatewaysData.forEach((g: any) => {
-          if (g.provider === 'wise') {
-            setWiseActive(g.is_active);
-          } else if (g.provider === 'stripe') {
-            setStripeActive(g.is_active);
-            setStripePublicKey(g.credentials?.publicKey || '');
-            setStripeSecretKey(g.credentials?.secretKey || '');
-          } else if (g.provider === 'mercadopago') {
-            setMpActive(g.is_active);
-            setMpPublicKey(g.credentials?.publicKey || '');
-            setMpSecretKey(g.credentials?.secretKey || '');
+          if (g.provider === 'lemonsqueezy') {
+            setLsActive(g.is_active);
+            setLsStoreId(g.credentials?.storeId || '');
+            setLsVariantId(g.credentials?.variantId || '');
+            setLsApiKey(g.credentials?.apiKey || '');
+            setLsWebhookSecret(g.credentials?.webhookSecret || '');
           }
         });
       }
@@ -1394,78 +1349,32 @@ export default function Perfil() {
       const activeTenant = localStorage.getItem('active-tenant-id');
       if (!activeTenant) return;
 
-      const paymentLinks = {
-        CH: wiseChfLink,
-        DE: wiseEurLink
-      };
-
-      const bankTransferDetails = {
-        CH: {
-          iban: wiseChfIban,
-          bic: wiseChfBic,
-          holder: wiseChfHolder,
-          bankName: wiseChfBank,
-          address: wiseChfAddress
-        },
-        DE: {
-          iban: wiseEurIban,
-          bic: wiseEurBic,
-          holder: wiseEurHolder,
-          bankName: wiseEurBank,
-          address: wiseEurAddress
-        }
-      };
-
       const { error: bookErr } = await supabase
         .from('booking_settings')
         .upsert({
           organization_id: activeTenant,
           booking_prefix: bookingPrefix,
           currency: bookingCurrency,
-          payment_links: paymentLinks,
-          bank_transfer_details: bankTransferDetails,
           terms_text: termsText,
           sandbox_mode: sandboxMode
         }, { onConflict: 'organization_id' });
 
       if (bookErr) throw bookErr;
-
-      const gateways = [
-        {
-          provider: 'wise',
-          is_active: wiseActive,
-          credentials: {}
-        },
-        {
-          provider: 'stripe',
-          is_active: stripeActive,
+      const { error: gateErr } = await supabase
+        .from('organization_payment_gateways')
+        .upsert({
+          organization_id: activeTenant,
+          provider: 'lemonsqueezy',
+          is_active: lsActive,
           credentials: {
-            publicKey: stripePublicKey,
-            secretKey: stripeSecretKey
+            storeId: lsStoreId.trim(),
+            variantId: lsVariantId.trim(),
+            apiKey: lsApiKey.trim(),
+            webhookSecret: lsWebhookSecret.trim()
           }
-        },
-        {
-          provider: 'mercadopago',
-          is_active: mpActive,
-          credentials: {
-            publicKey: mpPublicKey,
-            secretKey: mpSecretKey
-          }
-        }
-      ];
+        }, { onConflict: 'organization_id,provider' });
 
-      for (const g of gateways) {
-        const { error: gateErr } = await supabase
-          .from('organization_payment_gateways')
-          .upsert({
-            organization_id: activeTenant,
-            provider: g.provider,
-            is_active: g.is_active,
-            credentials: g.credentials
-          }, { onConflict: 'organization_id,provider' });
-
-        if (gateErr) throw gateErr;
-      }
+      if (gateErr) throw gateErr;
 
       alert('Configuración de reservas y pagos guardada exitosamente.');
       await fetchProfileAndOrg();
@@ -2453,343 +2362,129 @@ export default function Perfil() {
 
                 {/* Tab Content: Payment Gateways */}
                 {activeBookingTab === 'gateways' && (
-                  <div className="space-y-6">
+                  <div className="space-y-6 animate-in fade-in duration-200">
                     
-                    {/* Wise & Manual Transfers Card */}
-                    <div className="p-5 bg-surface-container-low rounded-xl border border-outline-variant/20 space-y-5">
+                    {/* Lemon Squeezy Integration Card */}
+                    <div className="p-6 bg-surface-container-low rounded-2xl border border-outline-variant/20 space-y-6">
                       <div className="flex items-center justify-between border-b border-outline-variant/15 pb-4">
                         <div className="flex items-center gap-3">
-                          <div className="p-2 bg-primary/10 text-primary rounded-lg">
-                            <Globe className="w-5 h-5" />
+                          <div className="p-2.5 bg-primary/10 text-primary rounded-xl">
+                            <CreditCard className="w-6 h-6" />
                           </div>
                           <div>
-                            <h4 className="font-label-md text-sm text-on-surface font-bold">Wise & Transferencia Bancaria Manual</h4>
-                            <p className="text-[11px] text-on-surface-variant">Muestra instrucciones y datos bancarios para transferencias directas en Suiza (CHF) y Alemania/Europa (EUR).</p>
+                            <h4 className="font-label-md text-sm text-on-surface font-bold">Pasarela Lemon Squeezy</h4>
+                            <p className="text-[11px] text-on-surface-variant">Merchant of Record integrado. Lemon Squeezy gestiona impuestos e IVA global por ti.</p>
                           </div>
                         </div>
                         <label className="relative inline-flex items-center cursor-pointer shrink-0">
                           <input 
                             type="checkbox" 
-                            checked={wiseActive}
-                            onChange={(e) => setWiseActive(e.target.checked)}
+                            checked={lsActive}
+                            onChange={(e) => setLsActive(e.target.checked)}
                             className="sr-only peer" 
                           />
-                          <div className="w-9 h-5 bg-outline-variant/40 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-primary"></div>
+                          <div className="w-10 h-6 bg-outline-variant/40 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary"></div>
                         </label>
                       </div>
 
-                      {wiseActive && (
-                        <div className="space-y-4">
-                          {/* Sub-tabs for Wise Currencies */}
-                          <div className="flex gap-1 p-1 bg-surface-container-lowest rounded-lg border border-outline-variant/15 max-w-sm">
-                            <button
-                              type="button"
-                              onClick={() => setActiveWiseTab('chf')}
-                              className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 text-xs font-semibold rounded-md transition-all cursor-pointer ${
-                                activeWiseTab === 'chf'
-                                  ? 'bg-primary text-on-primary shadow-sm'
-                                  : 'text-on-surface-variant hover:text-on-surface hover:bg-surface-container-low'
-                              }`}
-                            >
-                              <span>🇨🇭 Suiza (CHF)</span>
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => setActiveWiseTab('eur')}
-                              className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 text-xs font-semibold rounded-md transition-all cursor-pointer ${
-                                activeWiseTab === 'eur'
-                                  ? 'bg-primary text-on-primary shadow-sm'
-                                  : 'text-on-surface-variant hover:text-on-surface hover:bg-surface-container-low'
-                              }`}
-                            >
-                              <span>🇪🇺 Alemania / Europa (EUR)</span>
-                            </button>
-                          </div>
-
-                          {/* Wise CHF Switzerland */}
-                          {activeWiseTab === 'chf' && (
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4 bg-surface-container-lowest rounded-xl border border-outline-variant/10">
-                              <div className="md:col-span-2 flex items-center gap-1.5 text-xs font-bold text-primary pb-2 border-b border-outline-variant/10">
-                                <Globe className="w-3.5 h-3.5" />
-                                <span>Configuración Suiza (CHF)</span>
-                              </div>
-                              <div className="space-y-1">
-                                <label className="text-[10px] font-bold text-on-surface-variant uppercase">Wise Link CHF</label>
-                                <input 
-                                  type="text" 
-                                  placeholder="Wise Link CHF (https://wise.com/pay/me/...)"
-                                  value={wiseChfLink}
-                                  onChange={(e) => setWiseChfLink(e.target.value)}
-                                  className="w-full bg-surface-container-low border border-outline-variant/20 rounded-lg px-3 py-2 text-xs focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary text-on-surface"
-                                />
-                              </div>
-                              <div className="space-y-1">
-                                <label className="text-[10px] font-bold text-on-surface-variant uppercase">Titular de la Cuenta</label>
-                                <input 
-                                  type="text" 
-                                  placeholder="Titular de la Cuenta"
-                                  value={wiseChfHolder}
-                                  onChange={(e) => setWiseChfHolder(e.target.value)}
-                                  className="w-full bg-surface-container-low border border-outline-variant/20 rounded-lg px-3 py-2 text-xs focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary text-on-surface"
-                                />
-                              </div>
-                              <div className="space-y-1">
-                                <label className="text-[10px] font-bold text-on-surface-variant uppercase">IBAN CHF</label>
-                                <input 
-                                  type="text" 
-                                  placeholder="IBAN CHF"
-                                  value={wiseChfIban}
-                                  onChange={(e) => setWiseChfIban(e.target.value)}
-                                  className="w-full bg-surface-container-low border border-outline-variant/20 rounded-lg px-3 py-2 text-xs focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary text-on-surface font-mono"
-                                />
-                              </div>
-                              <div className="space-y-1">
-                                <label className="text-[10px] font-bold text-on-surface-variant uppercase">BIC / SWIFT</label>
-                                <input 
-                                  type="text" 
-                                  placeholder="BIC / SWIFT"
-                                  value={wiseChfBic}
-                                  onChange={(e) => setWiseChfBic(e.target.value)}
-                                  className="w-full bg-surface-container-low border border-outline-variant/20 rounded-lg px-3 py-2 text-xs focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary text-on-surface font-mono"
-                                />
-                              </div>
-                              <div className="space-y-1">
-                                <label className="text-[10px] font-bold text-on-surface-variant uppercase">Nombre del Banco</label>
-                                <input 
-                                  type="text" 
-                                  placeholder="Nombre del Banco"
-                                  value={wiseChfBank}
-                                  onChange={(e) => setWiseChfBank(e.target.value)}
-                                  className="w-full bg-surface-container-low border border-outline-variant/20 rounded-lg px-3 py-2 text-xs focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary text-on-surface"
-                                />
-                              </div>
-                              <div className="space-y-1">
-                                <label className="text-[10px] font-bold text-on-surface-variant uppercase">Dirección del Banco</label>
-                                <textarea 
-                                  placeholder="Dirección del Banco"
-                                  value={wiseChfAddress}
-                                  onChange={(e) => setWiseChfAddress(e.target.value)}
-                                  className="w-full bg-surface-container-low border border-outline-variant/20 rounded-lg px-3 py-2 text-xs focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary text-on-surface h-[38px] resize-none"
-                                />
-                              </div>
-                            </div>
-                          )}
-
-                          {/* Wise EUR Germany */}
-                          {activeWiseTab === 'eur' && (
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4 bg-surface-container-lowest rounded-xl border border-outline-variant/10">
-                              <div className="md:col-span-2 flex items-center gap-1.5 text-xs font-bold text-primary pb-2 border-b border-outline-variant/10">
-                                <Globe className="w-3.5 h-3.5" />
-                                <span>Configuración Alemania/Europa (EUR)</span>
-                              </div>
-                              <div className="space-y-1">
-                                <label className="text-[10px] font-bold text-on-surface-variant uppercase">Wise Link EUR</label>
-                                <input 
-                                  type="text" 
-                                  placeholder="Wise Link EUR (https://wise.com/pay/me/...)"
-                                  value={wiseEurLink}
-                                  onChange={(e) => setWiseEurLink(e.target.value)}
-                                  className="w-full bg-surface-container-low border border-outline-variant/20 rounded-lg px-3 py-2 text-xs focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary text-on-surface"
-                                />
-                              </div>
-                              <div className="space-y-1">
-                                <label className="text-[10px] font-bold text-on-surface-variant uppercase">Titular de la Cuenta</label>
-                                <input 
-                                  type="text" 
-                                  placeholder="Titular de la Cuenta"
-                                  value={wiseEurHolder}
-                                  onChange={(e) => setWiseEurHolder(e.target.value)}
-                                  className="w-full bg-surface-container-low border border-outline-variant/20 rounded-lg px-3 py-2 text-xs focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary text-on-surface"
-                                />
-                              </div>
-                              <div className="space-y-1">
-                                <label className="text-[10px] font-bold text-on-surface-variant uppercase">IBAN EUR</label>
-                                <input 
-                                  type="text" 
-                                  placeholder="IBAN EUR"
-                                  value={wiseEurIban}
-                                  onChange={(e) => setWiseEurIban(e.target.value)}
-                                  className="w-full bg-surface-container-low border border-outline-variant/20 rounded-lg px-3 py-2 text-xs focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary text-on-surface font-mono"
-                                />
-                              </div>
-                              <div className="space-y-1">
-                                <label className="text-[10px] font-bold text-on-surface-variant uppercase">BIC / SWIFT</label>
-                                <input 
-                                  type="text" 
-                                  placeholder="BIC / SWIFT"
-                                  value={wiseEurBic}
-                                  onChange={(e) => setWiseEurBic(e.target.value)}
-                                  className="w-full bg-surface-container-low border border-outline-variant/20 rounded-lg px-3 py-2 text-xs focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary text-on-surface font-mono"
-                                />
-                              </div>
-                              <div className="space-y-1">
-                                <label className="text-[10px] font-bold text-on-surface-variant uppercase">Nombre del Banco</label>
-                                <input 
-                                  type="text" 
-                                  placeholder="Nombre del Banco"
-                                  value={wiseEurBank}
-                                  onChange={(e) => setWiseEurBank(e.target.value)}
-                                  className="w-full bg-surface-container-low border border-outline-variant/20 rounded-lg px-3 py-2 text-xs focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary text-on-surface"
-                                />
-                              </div>
-                              <div className="space-y-1">
-                                <label className="text-[10px] font-bold text-on-surface-variant uppercase">Dirección del Banco</label>
-                                <textarea 
-                                  placeholder="Dirección del Banco"
-                                  value={wiseEurAddress}
-                                  onChange={(e) => setWiseEurAddress(e.target.value)}
-                                  className="w-full bg-surface-container-low border border-outline-variant/20 rounded-lg px-3 py-2 text-xs focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary text-on-surface h-[38px] resize-none"
-                                />
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Stripe Integration Card */}
-                    <div className="p-5 bg-surface-container-low rounded-xl border border-outline-variant/20 space-y-5">
-                      <div className="flex items-center justify-between border-b border-outline-variant/15 pb-4">
-                        <div className="flex items-center gap-3">
-                          <div className="p-2 bg-primary/10 text-primary rounded-lg">
-                            <CreditCard className="w-5 h-5" />
-                          </div>
-                          <div>
-                            <h4 className="font-label-md text-sm text-on-surface font-bold">Pasarela Stripe</h4>
-                            <p className="text-[11px] text-on-surface-variant">Cobros en línea automatizados con tarjetas internacionales y wallets.</p>
-                          </div>
-                        </div>
-                        <label className="relative inline-flex items-center cursor-pointer shrink-0">
-                          <input 
-                            type="checkbox" 
-                            checked={stripeActive}
-                            onChange={(e) => setStripeActive(e.target.checked)}
-                            className="sr-only peer" 
-                          />
-                          <div className="w-9 h-5 bg-outline-variant/40 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-primary"></div>
-                        </label>
-                      </div>
-
-                      {stripeActive && (
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4 bg-surface-container-lowest rounded-xl border border-outline-variant/10">
-                          <div className="space-y-1.5">
-                            <label className="flex items-center gap-1.5 text-[10px] font-bold text-on-surface-variant uppercase">
-                              <span>Stripe Public Key</span>
-                              <div className="group relative cursor-pointer">
-                                <Info className="w-3 h-3 text-on-surface-variant/70 hover:text-primary" />
-                                <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-64 p-2 bg-neutral-900 text-white text-[11px] rounded shadow-lg opacity-0 pointer-events-none group-hover:opacity-100 transition-opacity z-50 leading-relaxed normal-case font-normal">
-                                  Tu clave pública de Stripe (pk_live_... o pk_test_...).
+                      {lsActive && (
+                        <div className="space-y-5">
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-5 p-5 bg-surface-container-lowest rounded-2xl border border-outline-variant/10">
+                            
+                            <div className="space-y-1.5">
+                              <label className="flex items-center gap-1.5 text-[10px] font-bold text-on-surface-variant uppercase tracking-wider">
+                                <span>Lemon Squeezy Store ID</span>
+                                <div className="group relative cursor-pointer">
+                                  <Info className="w-3.5 h-3.5 text-on-surface-variant/70 hover:text-primary" />
+                                  <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-64 p-2.5 bg-neutral-900 text-white text-[11px] rounded-lg shadow-lg opacity-0 pointer-events-none group-hover:opacity-100 transition-opacity z-50 leading-relaxed normal-case font-normal">
+                                    Identificador numérico de tu tienda en Lemon Squeezy (ej: 438567).
+                                  </div>
                                 </div>
-                              </div>
-                            </label>
-                            <input 
-                              type="text" 
-                              value={stripePublicKey}
-                              onChange={(e) => setStripePublicKey(e.target.value)}
-                              placeholder="pk_test_..."
-                              className="w-full bg-surface-container-low border border-outline-variant/20 rounded-lg px-3 py-2 text-xs focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary text-on-surface font-mono"
-                            />
-                          </div>
-                          <div className="space-y-1.5">
-                            <label className="flex items-center gap-1.5 text-[10px] font-bold text-on-surface-variant uppercase">
-                              <span>Stripe Secret Key</span>
-                              <div className="group relative cursor-pointer">
-                                <Info className="w-3 h-3 text-on-surface-variant/70 hover:text-primary" />
-                                <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-64 p-2 bg-neutral-900 text-white text-[11px] rounded shadow-lg opacity-0 pointer-events-none group-hover:opacity-100 transition-opacity z-50 leading-relaxed normal-case font-normal">
-                                  Tu clave secreta de Stripe. Nunca la compartas.
-                                </div>
-                              </div>
-                            </label>
-                            <div className="relative flex items-center">
+                              </label>
                               <input 
-                                type={showStripeSecret ? 'text' : 'password'}
-                                value={stripeSecretKey}
-                                onChange={(e) => setStripeSecretKey(e.target.value)}
-                                placeholder="sk_test_..."
-                                className="w-full bg-surface-container-low border border-outline-variant/20 rounded-lg pl-3 pr-10 py-2 text-xs focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary text-on-surface font-mono"
+                                type="text" 
+                                value={lsStoreId}
+                                onChange={(e) => setLsStoreId(e.target.value)}
+                                placeholder="e.g. 438567"
+                                className="w-full bg-surface-container-low border border-outline-variant/20 rounded-lg px-3 py-2 text-xs focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary text-on-surface font-mono"
                               />
-                              <button
-                                type="button"
-                                onClick={() => setShowStripeSecret(!showStripeSecret)}
-                                className="absolute right-3 text-on-surface-variant hover:text-primary cursor-pointer transition-colors"
-                              >
-                                {showStripeSecret ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
-                              </button>
                             </div>
-                          </div>
-                        </div>
-                      )}
-                    </div>
 
-                    {/* MercadoPago Integration Card */}
-                    <div className="p-5 bg-surface-container-low rounded-xl border border-outline-variant/20 space-y-5">
-                      <div className="flex items-center justify-between border-b border-outline-variant/15 pb-4">
-                        <div className="flex items-center gap-3">
-                          <div className="p-2 bg-primary/10 text-primary rounded-lg">
-                            <CreditCard className="w-5 h-5" />
-                          </div>
-                          <div>
-                            <h4 className="font-label-md text-sm text-on-surface font-bold">Pasarela MercadoPago (Chile)</h4>
-                            <p className="text-[11px] text-on-surface-variant">Cobros locales automatizados en Chile a través de Webpay o Khipu.</p>
-                          </div>
-                        </div>
-                        <label className="relative inline-flex items-center cursor-pointer shrink-0">
-                          <input 
-                            type="checkbox" 
-                            checked={mpActive}
-                            onChange={(e) => setMpActive(e.target.checked)}
-                            className="sr-only peer" 
-                          />
-                          <div className="w-9 h-5 bg-outline-variant/40 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-primary"></div>
-                        </label>
-                      </div>
-
-                      {mpActive && (
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4 bg-surface-container-lowest rounded-xl border border-outline-variant/10">
-                          <div className="space-y-1.5">
-                            <label className="flex items-center gap-1.5 text-[10px] font-bold text-on-surface-variant uppercase">
-                              <span>MercadoPago Public Key</span>
-                              <div className="group relative cursor-pointer">
-                                <Info className="w-3 h-3 text-on-surface-variant/70 hover:text-primary" />
-                                <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-64 p-2 bg-neutral-900 text-white text-[11px] rounded shadow-lg opacity-0 pointer-events-none group-hover:opacity-100 transition-opacity z-50 leading-relaxed normal-case font-normal">
-                                  Clave pública de integración de MercadoPago.
+                            <div className="space-y-1.5">
+                              <label className="flex items-center gap-1.5 text-[10px] font-bold text-on-surface-variant uppercase tracking-wider">
+                                <span>Default Variant ID</span>
+                                <div className="group relative cursor-pointer">
+                                  <Info className="w-3.5 h-3.5 text-on-surface-variant/70 hover:text-primary" />
+                                  <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-64 p-2.5 bg-neutral-900 text-white text-[11px] rounded-lg shadow-lg opacity-0 pointer-events-none group-hover:opacity-100 transition-opacity z-50 leading-relaxed normal-case font-normal">
+                                    Identificador del producto/variante por defecto para las reservas (ej: 1945659).
+                                  </div>
                                 </div>
-                              </div>
-                            </label>
-                            <input 
-                              type="text" 
-                              value={mpPublicKey}
-                              onChange={(e) => setMpPublicKey(e.target.value)}
-                              placeholder="APP_USR-..."
-                              className="w-full bg-surface-container-low border border-outline-variant/20 rounded-lg px-3 py-2 text-xs focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary text-on-surface font-mono"
-                            />
-                          </div>
-                          <div className="space-y-1.5">
-                            <label className="flex items-center gap-1.5 text-[10px] font-bold text-on-surface-variant uppercase">
-                              <span>MercadoPago Access Token</span>
-                              <div className="group relative cursor-pointer">
-                                <Info className="w-3 h-3 text-on-surface-variant/70 hover:text-primary" />
-                                <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-64 p-2 bg-neutral-900 text-white text-[11px] rounded shadow-lg opacity-0 pointer-events-none group-hover:opacity-100 transition-opacity z-50 leading-relaxed normal-case font-normal">
-                                  Token de acceso privado de MercadoPago.
-                                </div>
-                              </div>
-                            </label>
-                            <div className="relative flex items-center">
+                              </label>
                               <input 
-                                type={showMpSecret ? 'text' : 'password'}
-                                value={mpSecretKey}
-                                onChange={(e) => setMpSecretKey(e.target.value)}
-                                placeholder="APP_USR-..."
-                                className="w-full bg-surface-container-low border border-outline-variant/20 rounded-lg pl-3 pr-10 py-2 text-xs focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary text-on-surface font-mono"
+                                type="text" 
+                                value={lsVariantId}
+                                onChange={(e) => setLsVariantId(e.target.value)}
+                                placeholder="e.g. 1945659"
+                                className="w-full bg-surface-container-low border border-outline-variant/20 rounded-lg px-3 py-2 text-xs focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary text-on-surface font-mono"
                               />
-                              <button
-                                type="button"
-                                onClick={() => setShowMpSecret(!showMpSecret)}
-                                className="absolute right-3 text-on-surface-variant hover:text-primary cursor-pointer transition-colors"
-                              >
-                                {showMpSecret ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
-                              </button>
                             </div>
+
+                            <div className="space-y-1.5 md:col-span-2">
+                              <label className="flex items-center gap-1.5 text-[10px] font-bold text-on-surface-variant uppercase tracking-wider">
+                                <span>API Key (Opcional)</span>
+                                <div className="group relative cursor-pointer">
+                                  <Info className="w-3.5 h-3.5 text-on-surface-variant/70 hover:text-primary" />
+                                  <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-64 p-2.5 bg-neutral-900 text-white text-[11px] rounded-lg shadow-lg opacity-0 pointer-events-none group-hover:opacity-100 transition-opacity z-50 leading-relaxed normal-case font-normal">
+                                    Clave de API privada de Lemon Squeezy. Si se deja vacía, se utilizará la clave global de la plataforma.
+                                  </div>
+                                </div>
+                              </label>
+                              <div className="relative flex items-center">
+                                <input 
+                                  type={showLsApiKey ? 'text' : 'password'}
+                                  value={lsApiKey}
+                                  onChange={(e) => setLsApiKey(e.target.value)}
+                                  placeholder="ls_..."
+                                  className="w-full bg-surface-container-low border border-outline-variant/20 rounded-lg pl-3 pr-10 py-2 text-xs focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary text-on-surface font-mono"
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() => setShowLsApiKey(!showLsApiKey)}
+                                  className="absolute right-3 text-on-surface-variant hover:text-primary cursor-pointer transition-colors"
+                                >
+                                  {showLsApiKey ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                                </button>
+                              </div>
+                            </div>
+
+                            <div className="space-y-1.5 md:col-span-2">
+                              <label className="flex items-center gap-1.5 text-[10px] font-bold text-on-surface-variant uppercase tracking-wider">
+                                <span>Webhook Secret (Opcional)</span>
+                                <div className="group relative cursor-pointer">
+                                  <Info className="w-3.5 h-3.5 text-on-surface-variant/70 hover:text-primary" />
+                                  <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-64 p-2.5 bg-neutral-900 text-white text-[11px] rounded-lg shadow-lg opacity-0 pointer-events-none group-hover:opacity-100 transition-opacity z-50 leading-relaxed normal-case font-normal">
+                                    Firma secreta para validar eventos de Webhooks de Lemon Squeezy en tu servidor.
+                                  </div>
+                                </div>
+                              </label>
+                              <div className="relative flex items-center">
+                                <input 
+                                  type={showLsWebhookSecret ? 'text' : 'password'}
+                                  value={lsWebhookSecret}
+                                  onChange={(e) => setLsWebhookSecret(e.target.value)}
+                                  placeholder="Secreto de firma"
+                                  className="w-full bg-surface-container-low border border-outline-variant/20 rounded-lg pl-3 pr-10 py-2 text-xs focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary text-on-surface font-mono"
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() => setShowLsWebhookSecret(!showLsWebhookSecret)}
+                                  className="absolute right-3 text-on-surface-variant hover:text-primary cursor-pointer transition-colors"
+                                >
+                                  {showLsWebhookSecret ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                                </button>
+                              </div>
+                            </div>
+
                           </div>
                         </div>
                       )}
