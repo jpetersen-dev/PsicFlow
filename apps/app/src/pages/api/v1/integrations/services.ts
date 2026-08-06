@@ -34,7 +34,7 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
     // 3. Fetch active services for this organization
     const { data: services, error: fetchErr } = await supabase
       .from('services')
-      .select('id, title, id_slug, duration_minutes, price, currency, image_url, desc, clinical_approach, seo_description, icon, color')
+      .select('id, title, id_slug, duration_minutes, price, currency, image_url, desc, clinical_approach, seo_description, icon, color, alternate_prices')
       .eq('organization_id', organizationId)
       .eq('is_active', true)
       .order('title', { ascending: true });

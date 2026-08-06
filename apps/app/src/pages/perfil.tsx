@@ -137,6 +137,7 @@ export default function Perfil() {
   const [serviceColor, setServiceColor] = useState('#2A9D8F');
   const [serviceImageUrl, setServiceImageUrl] = useState('');
   const [isUploadingServiceImage, setIsUploadingServiceImage] = useState(false);
+  const [serviceAlternatePrices, setServiceAlternatePrices] = useState<any[]>([]);
 
   // Team Management states
   const [activeTenantId, setActiveTenantId] = useState<string | null>(null);
@@ -1480,7 +1481,8 @@ export default function Perfil() {
         clinical_approach: serviceClinicalApproach.trim() || null,
         seo_description: serviceSeoDescription.trim() || null,
         icon: serviceIcon || null,
-        color: serviceColor || null
+        color: serviceColor || null,
+        alternate_prices: serviceAlternatePrices || []
       };
 
       if (editingService && editingService.id) {
@@ -1512,6 +1514,7 @@ export default function Perfil() {
       setServiceIcon('User');
       setServiceColor('#2A9D8F');
       setServiceImageUrl('');
+      setServiceAlternatePrices([]);
 
       await fetchServices();
     } catch (err: any) {
@@ -1535,6 +1538,7 @@ export default function Perfil() {
     setServiceIcon(srv.icon || 'User');
     setServiceColor(srv.color || '#2A9D8F');
     setServiceImageUrl(srv.image_url || '');
+    setServiceAlternatePrices(srv.alternate_prices || []);
   };
 
   const handleNewServiceClick = () => {
@@ -1551,6 +1555,7 @@ export default function Perfil() {
     setServiceIcon('User');
     setServiceColor('#2A9D8F');
     setServiceImageUrl('');
+    setServiceAlternatePrices([]);
   };
 
   const handleServiceImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -2678,7 +2683,7 @@ export default function Perfil() {
                             />
                           </div>
 
-                          <div className="grid grid-cols-3 gap-2">
+                           <div className="grid grid-cols-3 gap-2">
                             <div className="col-span-2 space-y-1.5">
                               <label className="text-[11px] font-semibold text-on-surface-variant uppercase tracking-wider">Precio</label>
                               <input
@@ -2702,6 +2707,128 @@ export default function Perfil() {
                                 <option value="USD">USD</option>
                               </select>
                             </div>
+                          </div>
+
+                          {/* Precios Alternativos (Multi-divisa) */}
+                          <div className="space-y-3 md:col-span-2 p-4 bg-surface-container-low rounded-xl border border-outline-variant/20">
+                            <div className="flex items-center justify-between">
+                              <div>
+                                <h4 className="text-xs font-bold text-on-surface uppercase tracking-wider">Precios Alternativos / Localizados</h4>
+                                <p className="text-[11px] text-on-surface-variant">Configura equivalencias para pacientes de otras regiones.</p>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  // Add default alternate price row
+                                  setServiceAlternatePrices([
+                                    ...serviceAlternatePrices,
+                                    {
+                                      price: 0,
+                                      currency: 'EUR',
+                                      gateway_details: lsActive ? { store_id: lsStoreId || '', variant_id: '' } : {}
+                                    }
+                                  ]);
+                                }}
+                                className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-primary hover:text-primary-hover transition-colors px-2 py-1 bg-primary/10 rounded-md"
+                              >
+                                Agregar Equivalencia
+                              </button>
+                            </div>
+
+                            {serviceAlternatePrices.length === 0 ? (
+                              <p className="text-xs italic text-on-surface-variant/70 text-center py-2">Sin precios alternativos configurados.</p>
+                            ) : (
+                              <div className="space-y-3">
+                                {serviceAlternatePrices.map((altPrice, index) => {
+                                  return (
+                                    <div key={index} className="grid grid-cols-1 md:grid-cols-3 gap-2.5 p-3 bg-surface-container-lowest border border-outline-variant/25 rounded-lg relative">
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setServiceAlternatePrices(serviceAlternatePrices.filter((_, idx) => idx !== index));
+                                        }}
+                                        className="absolute -top-1.5 -right-1.5 p-1 bg-error-container hover:bg-error-container-hover text-on-error-container rounded-full border border-outline-variant/10 shadow-sm"
+                                        title="Eliminar equivalencia"
+                                      >
+                                        <X size={10} />
+                                      </button>
+                                      
+                                      <div className="space-y-1">
+                                        <label className="text-[10px] font-bold text-on-surface-variant uppercase tracking-wider">Moneda</label>
+                                        <select
+                                          value={altPrice.currency}
+                                          onChange={(e) => {
+                                            const updated = [...serviceAlternatePrices];
+                                            updated[index].currency = e.target.value;
+                                            setServiceAlternatePrices(updated);
+                                          }}
+                                          className="w-full text-xs bg-surface-container-lowest border border-outline-variant/35 rounded-md px-2 py-1.5 text-on-surface focus:outline-none focus:border-primary"
+                                        >
+                                          <option value="CLP">CLP</option>
+                                          <option value="CHF">CHF</option>
+                                          <option value="EUR">EUR</option>
+                                          <option value="USD">USD</option>
+                                        </select>
+                                      </div>
+
+                                      <div className="space-y-1">
+                                        <label className="text-[10px] font-bold text-on-surface-variant uppercase tracking-wider">Precio</label>
+                                        <input
+                                          type="number"
+                                          step="0.01"
+                                          value={altPrice.price}
+                                          onChange={(e) => {
+                                            const updated = [...serviceAlternatePrices];
+                                            updated[index].price = Number(e.target.value);
+                                            setServiceAlternatePrices(updated);
+                                          }}
+                                          className="w-full text-xs bg-surface-container-lowest border border-outline-variant/35 rounded-md px-2.5 py-1.5 text-on-surface focus:outline-none focus:border-primary"
+                                        />
+                                      </div>
+
+                                      {lsActive && (
+                                        <div className="space-y-2 md:col-span-3 border-t border-outline-variant/10 pt-2.5 grid grid-cols-2 gap-2">
+                                          <div className="space-y-1">
+                                            <label className="text-[9px] font-bold text-on-surface-variant uppercase tracking-wider">Lemon Squeezy Store ID</label>
+                                            <input
+                                              type="text"
+                                              value={altPrice.gateway_details?.store_id || ''}
+                                              onChange={(e) => {
+                                                const updated = [...serviceAlternatePrices];
+                                                updated[index].gateway_details = {
+                                                  ...updated[index].gateway_details,
+                                                  store_id: e.target.value
+                                                };
+                                                setServiceAlternatePrices(updated);
+                                              }}
+                                              placeholder={lsStoreId || "Ej. 438567"}
+                                              className="w-full text-[11px] bg-surface-container-lowest border border-outline-variant/35 rounded-md px-2 py-1 text-on-surface font-mono"
+                                            />
+                                          </div>
+                                          <div className="space-y-1">
+                                            <label className="text-[9px] font-bold text-on-surface-variant uppercase tracking-wider">Lemon Squeezy Variant ID</label>
+                                            <input
+                                              type="text"
+                                              value={altPrice.gateway_details?.variant_id || ''}
+                                              onChange={(e) => {
+                                                const updated = [...serviceAlternatePrices];
+                                                updated[index].gateway_details = {
+                                                  ...updated[index].gateway_details,
+                                                  variant_id: e.target.value
+                                                };
+                                                setServiceAlternatePrices(updated);
+                                              }}
+                                              placeholder="Ej. 1945659"
+                                              className="w-full text-[11px] bg-surface-container-lowest border border-outline-variant/35 rounded-md px-2 py-1 text-on-surface font-mono"
+                                            />
+                                          </div>
+                                        </div>
+                                      )}
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            )}
                           </div>
 
                           <div className="space-y-1.5 md:col-span-2">

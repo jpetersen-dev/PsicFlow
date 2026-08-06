@@ -34,7 +34,7 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
 
   const organizationId = validation.organization_id;
 
-  const { specialist_id, date, start_time, patient_data, service_id } = req.body;
+  const { specialist_id, date, start_time, patient_data, service_id, currency } = req.body;
 
   if (!specialist_id || !date || !start_time || !patient_data) {
     return res.status(400).json({ error: 'Faltan parámetros obligatorios en el cuerpo del mensaje.' });
@@ -72,7 +72,8 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
       p_phone: phone ? phone.trim() : null,
       p_transaction_id: transactionId,
       p_value: 0.00,
-      p_service_id: service_id || null
+      p_service_id: service_id || null,
+      p_currency: currency || undefined
     });
 
     if (reserveErr || !reservationList || reservationList.length === 0) {
