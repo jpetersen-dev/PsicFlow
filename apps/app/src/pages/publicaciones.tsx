@@ -45,6 +45,24 @@ export default function Publicaciones() {
     if (!confirm('¿Estás seguro de que deseas eliminar este artículo permanentemente? Esta acción no se puede deshacer.')) return;
     setDeletingId(id);
     try {
+      const article = articles.find(art => art.id === id);
+      if (article) {
+        // Delete images from storage bucket if they are uploaded files
+        const imagesToDelete = [article.image_url, article.secondary_image_url].filter(Boolean);
+        for (const url of imagesToDelete) {
+          const bucketSearch = '/public/articles/';
+          const index = url.indexOf(bucketSearch);
+          if (index !== -1) {
+            const oldPath = url.substring(index + bucketSearch.length);
+            try {
+              await supabase.storage.from('articles').remove([oldPath]);
+            } catch (deleteErr) {
+              console.warn('Error deleting article image from storage:', deleteErr);
+            }
+          }
+        }
+      }
+
       const { error } = await supabase
         .from('articles')
         .delete()

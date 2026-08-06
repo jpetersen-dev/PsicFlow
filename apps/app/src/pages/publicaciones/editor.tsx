@@ -31,6 +31,8 @@ export default function EditorPublicacion() {
   const [jsonLd, setJsonLd] = useState('');
   const [ogTitle, setOgTitle] = useState('');
   const [ogDescription, setOgDescription] = useState('');
+  const [isUploadingPortada, setIsUploadingPortada] = useState(false);
+  const [isUploadingSecundaria, setIsUploadingSecundaria] = useState(false);
 
   // UI / Logic states
   const [loading, setLoading] = useState(false);
@@ -165,6 +167,81 @@ export default function EditorPublicacion() {
         .replace(/-+/g, '-') // remove double dashes
         .replace(/(^-|-$)/g, ''); // trim starting/ending dashes
       setSlug(generatedSlug);
+    }
+  };
+
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>, target: 'portada' | 'secundaria') => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (target === 'portada') setIsUploadingPortada(true);
+    else setIsUploadingSecundaria(true);
+
+    try {
+      const activeTenant = organizationId || localStorage.getItem('active-tenant-id');
+      if (!activeTenant) throw new Error('No hay clínica activa.');
+
+      // If replacing an existing bucket image, delete the old file
+      const currentUrl = target === 'portada' ? imageUrl : secondaryImageUrl;
+      if (currentUrl) {
+        try {
+          const bucketSearch = '/public/articles/';
+          const index = currentUrl.indexOf(bucketSearch);
+          if (index !== -1) {
+            const oldPath = currentUrl.substring(index + bucketSearch.length);
+            await supabase.storage.from('articles').remove([oldPath]);
+          }
+        } catch (deleteErr) {
+          console.warn('Error deleting old article image:', deleteErr);
+        }
+      }
+
+      // Convert to WebP on client side using Canvas
+      const webpBlob = await new Promise<Blob>((resolve, reject) => {
+        const img = new Image();
+        img.src = URL.createObjectURL(file);
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          canvas.width = img.width;
+          canvas.height = img.height;
+          const ctx = canvas.getContext('2d');
+          if (!ctx) {
+            reject(new Error('No se pudo obtener el contexto Canvas 2D'));
+            return;
+          }
+          ctx.drawImage(img, 0, 0);
+          canvas.toBlob((blob) => {
+            if (blob) resolve(blob);
+            else reject(new Error('Falló la conversión a WebP'));
+          }, 'image/webp', 0.85);
+        };
+        img.onerror = () => reject(new Error('Error al cargar la imagen seleccionada.'));
+      });
+
+      const fileName = `${Date.now()}_${target}.webp`;
+      const path = `${activeTenant}/${fileName}`;
+
+      const { error: uploadErr } = await supabase.storage
+        .from('articles')
+        .upload(path, webpBlob, { 
+          contentType: 'image/webp',
+          upsert: true 
+        });
+
+      if (uploadErr) throw uploadErr;
+
+      const { data } = supabase.storage.from('articles').getPublicUrl(path);
+      if (target === 'portada') {
+        setImageUrl(data.publicUrl);
+      } else {
+        setSecondaryImageUrl(data.publicUrl);
+      }
+      alert(`Imagen de ${target === 'portada' ? 'portada' : 'secundaria'} cargada y convertida a WebP con éxito.`);
+    } catch (err: any) {
+      alert('Error al subir imagen: ' + err.message);
+    } finally {
+      if (target === 'portada') setIsUploadingPortada(false);
+      else setIsUploadingSecundaria(false);
     }
   };
 
@@ -515,28 +592,71 @@ export default function EditorPublicacion() {
                 </div>
               </div>
 
-              {/* Image Cover URL */}
-              <div className="space-y-1">
-                <label className="text-xs font-semibold text-text-secondary">URL de Imagen de Portada (Unsplash/etc)</label>
-                <input
-                  type="text"
-                  value={imageUrl}
-                  onChange={(e) => setImageUrl(e.target.value)}
-                  placeholder="https://images.unsplash.com/..."
-                  className="w-full px-3 py-2 bg-bg-input border border-border-color rounded-xl text-sm focus:outline-none focus:border-accent-primary text-text-primary"
-                />
+              {/* Image Cover */}
+              <div className="space-y-2 border-b border-border-color pb-4">
+                <label className="text-xs font-semibold text-text-secondary block">Imagen de Portada (Ilustración Principal)</label>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-1">
+                    <span className="text-[10px] text-text-muted">Opción A: Ingresar URL externa</span>
+                    <input
+                      type="text"
+                      value={imageUrl}
+                      onChange={(e) => setImageUrl(e.target.value)}
+                      placeholder="https://images.unsplash.com/..."
+                      className="w-full px-3 py-2 bg-bg-input border border-border-color rounded-xl text-sm focus:outline-none focus:border-accent-primary text-text-primary"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <span className="text-[10px] text-text-muted">Opción B: Subir imagen (Optimizado WebP)</span>
+                    <div className="flex items-center gap-2 p-1 bg-bg-input border border-border-color rounded-xl h-[38px]">
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={(e) => handleImageUpload(e, 'portada')}
+                        className="text-xs text-text-secondary file:mr-3 file:py-1 file:px-2 file:rounded-lg file:border-0 file:text-[10px] file:font-bold file:bg-accent-primary/10 file:text-accent-primary hover:file:bg-accent-primary/20 w-full cursor-pointer"
+                      />
+                    </div>
+                  </div>
+                </div>
+                {isUploadingPortada && (
+                  <p className="text-[10px] text-accent-primary animate-pulse font-sans">Convirtiendo y subiendo imagen de portada en formato WebP...</p>
+                )}
+                {imageUrl && (
+                  <div className="relative aspect-[21/9] w-full rounded-xl overflow-hidden border border-border-color bg-bg-input mt-2 shadow-sm">
+                    <img src={imageUrl} alt="Miniatura Portada" className="w-full h-full object-cover" />
+                  </div>
+                )}
               </div>
 
-              {/* Secondary Image URL */}
-              <div className="space-y-1">
-                <label className="text-xs font-semibold text-text-secondary">URL de Imagen Secundaria</label>
-                <input
-                  type="text"
-                  value={secondaryImageUrl}
-                  onChange={(e) => setSecondaryImageUrl(e.target.value)}
-                  placeholder="https://images.unsplash.com/..."
-                  className="w-full px-3 py-2 bg-bg-input border border-border-color rounded-xl text-sm focus:outline-none focus:border-accent-primary text-text-primary"
-                />
+              {/* Secondary Image */}
+              <div className="space-y-2 border-b border-border-color pb-4">
+                <label className="text-xs font-semibold text-text-secondary block">Imagen Secundaria (Ilustración en el cuerpo)</label>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-1">
+                    <span className="text-[10px] text-text-muted">Opción A: Ingresar URL externa</span>
+                    <input
+                      type="text"
+                      value={secondaryImageUrl}
+                      onChange={(e) => setSecondaryImageUrl(e.target.value)}
+                      placeholder="https://images.unsplash.com/..."
+                      className="w-full px-3 py-2 bg-bg-input border border-border-color rounded-xl text-sm focus:outline-none focus:border-accent-primary text-text-primary"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <span className="text-[10px] text-text-muted">Opción B: Subir imagen (Optimizado WebP)</span>
+                    <div className="flex items-center gap-2 p-1 bg-bg-input border border-border-color rounded-xl h-[38px]">
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={(e) => handleImageUpload(e, 'secundaria')}
+                        className="text-xs text-text-secondary file:mr-3 file:py-1 file:px-2 file:rounded-lg file:border-0 file:text-[10px] file:font-bold file:bg-accent-primary/10 file:text-accent-primary hover:file:bg-accent-primary/20 w-full cursor-pointer"
+                      />
+                    </div>
+                  </div>
+                </div>
+                {isUploadingSecundaria && (
+                  <p className="text-[10px] text-accent-primary animate-pulse font-sans">Convirtiendo y subiendo imagen secundaria en formato WebP...</p>
+                )}
                 <p className="text-[10px] text-text-muted mt-1 leading-relaxed">
                   Usa el marcador <code>[URL_IMAGEN_SECUNDARIA]</code> en tu cuerpo HTML para colocar esta ilustración donde prefieras.
                 </p>
