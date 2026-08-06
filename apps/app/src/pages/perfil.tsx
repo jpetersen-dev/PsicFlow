@@ -130,6 +130,13 @@ export default function Perfil() {
   const [serviceCurrency, setServiceCurrency] = useState('CLP');
   const [serviceActiveStatus, setServiceActiveStatus] = useState(true);
   const [isSavingService, setIsSavingService] = useState(false);
+  const [serviceDesc, setServiceDesc] = useState('');
+  const [serviceClinicalApproach, setServiceClinicalApproach] = useState('');
+  const [serviceSeoDescription, setServiceSeoDescription] = useState('');
+  const [serviceIcon, setServiceIcon] = useState('User');
+  const [serviceColor, setServiceColor] = useState('#2A9D8F');
+  const [serviceImageUrl, setServiceImageUrl] = useState('');
+  const [isUploadingServiceImage, setIsUploadingServiceImage] = useState(false);
 
   // Team Management states
   const [activeTenantId, setActiveTenantId] = useState<string | null>(null);
@@ -1467,7 +1474,13 @@ export default function Perfil() {
         duration_minutes: Number(serviceDuration),
         price: Number(servicePrice),
         currency: serviceCurrency,
-        is_active: serviceActiveStatus
+        is_active: serviceActiveStatus,
+        image_url: serviceImageUrl || null,
+        desc: serviceDesc.trim() || null,
+        clinical_approach: serviceClinicalApproach.trim() || null,
+        seo_description: serviceSeoDescription.trim() || null,
+        icon: serviceIcon || null,
+        color: serviceColor || null
       };
 
       if (editingService && editingService.id) {
@@ -1493,6 +1506,12 @@ export default function Perfil() {
       setServiceDuration(50);
       setServicePrice(0);
       setServiceActiveStatus(true);
+      setServiceDesc('');
+      setServiceClinicalApproach('');
+      setServiceSeoDescription('');
+      setServiceIcon('User');
+      setServiceColor('#2A9D8F');
+      setServiceImageUrl('');
 
       await fetchServices();
     } catch (err: any) {
@@ -1510,6 +1529,12 @@ export default function Perfil() {
     setServicePrice(srv.price);
     setServiceCurrency(srv.currency);
     setServiceActiveStatus(srv.is_active);
+    setServiceDesc(srv.desc || '');
+    setServiceClinicalApproach(srv.clinical_approach || '');
+    setServiceSeoDescription(srv.seo_description || '');
+    setServiceIcon(srv.icon || 'User');
+    setServiceColor(srv.color || '#2A9D8F');
+    setServiceImageUrl(srv.image_url || '');
   };
 
   const handleNewServiceClick = () => {
@@ -1520,13 +1545,100 @@ export default function Perfil() {
     setServicePrice(0);
     setServiceCurrency(bookingCurrency || 'CLP');
     setServiceActiveStatus(true);
+    setServiceDesc('');
+    setServiceClinicalApproach('');
+    setServiceSeoDescription('');
+    setServiceIcon('User');
+    setServiceColor('#2A9D8F');
+    setServiceImageUrl('');
   };
 
-  const handleDeleteService = async (srvId: string, srvTitle: string) => {
+  const handleServiceImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    
+    setIsUploadingServiceImage(true);
+    try {
+      const activeTenant = localStorage.getItem('active-tenant-id');
+      if (!activeTenant) throw new Error('No hay clínica activa.');
+
+      // If there is an existing image URL from our services bucket, delete it first
+      if (serviceImageUrl) {
+        try {
+          const bucketSearch = '/public/services/';
+          const index = serviceImageUrl.indexOf(bucketSearch);
+          if (index !== -1) {
+            const oldPath = serviceImageUrl.substring(index + bucketSearch.length);
+            await supabase.storage.from('services').remove([oldPath]);
+          }
+        } catch (deleteErr) {
+          console.warn('Error deleting old service image:', deleteErr);
+        }
+      }
+
+      // Convert to WebP on client side using Canvas
+      const webpBlob = await new Promise<Blob>((resolve, reject) => {
+        const img = new Image();
+        img.src = URL.createObjectURL(file);
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          canvas.width = img.width;
+          canvas.height = img.height;
+          const ctx = canvas.getContext('2d');
+          if (!ctx) {
+            reject(new Error('No se pudo obtener el contexto Canvas 2D'));
+            return;
+          }
+          ctx.drawImage(img, 0, 0);
+          canvas.toBlob((blob) => {
+            if (blob) resolve(blob);
+            else reject(new Error('Falló la conversión a WebP'));
+          }, 'image/webp', 0.85);
+        };
+        img.onerror = () => reject(new Error('Error al cargar la imagen seleccionada.'));
+      });
+
+      const fileName = `${Date.now()}_service.webp`;
+      const path = `${activeTenant}/${fileName}`;
+
+      const { error: uploadErr } = await supabase.storage
+        .from('services')
+        .upload(path, webpBlob, { 
+          contentType: 'image/webp',
+          upsert: true 
+        });
+
+      if (uploadErr) throw uploadErr;
+
+      const { data } = supabase.storage.from('services').getPublicUrl(path);
+      setServiceImageUrl(data.publicUrl);
+      alert('Imagen de servicio cargada y convertida a WebP con éxito.');
+    } catch (err: any) {
+      alert('Error al subir imagen de servicio: ' + err.message);
+    } finally {
+      setIsUploadingServiceImage(false);
+    }
+  };
+
+  const handleDeleteService = async (srvId: string, srvTitle: string, imageUrl?: string) => {
     const confirmDel = confirm(`¿Estás seguro de eliminar el servicio "${srvTitle}"?`);
     if (!confirmDel) return;
 
     try {
+      // Delete old file from storage bucket if present
+      if (imageUrl) {
+        try {
+          const bucketSearch = '/public/services/';
+          const index = imageUrl.indexOf(bucketSearch);
+          if (index !== -1) {
+            const oldPath = imageUrl.substring(index + bucketSearch.length);
+            await supabase.storage.from('services').remove([oldPath]);
+          }
+        } catch (deleteErr) {
+          console.warn('Error deleting service image from storage:', deleteErr);
+        }
+      }
+
       const { error } = await supabase
         .from('services')
         .delete()
@@ -2592,7 +2704,113 @@ export default function Perfil() {
                             </div>
                           </div>
 
-                          <div className="flex items-center gap-3 pt-2">
+                          <div className="space-y-1.5 md:col-span-2">
+                            <label className="text-[11px] font-semibold text-on-surface-variant uppercase tracking-wider">Descripción Corta (Marketing)</label>
+                            <textarea
+                              value={serviceDesc}
+                              onChange={(e) => setServiceDesc(e.target.value)}
+                              placeholder="Ej. Acompañamiento especializado para profesionales en el extranjero..."
+                              rows={2}
+                              className="w-full text-sm bg-surface-container-lowest border border-outline-variant/35 rounded-lg px-3.5 py-2.5 text-on-surface focus:outline-none focus:border-primary transition-colors"
+                            />
+                          </div>
+
+                          <div className="space-y-1.5 md:col-span-2">
+                            <label className="text-[11px] font-semibold text-on-surface-variant uppercase tracking-wider">Abordaje Clínico (Descripción Detallada)</label>
+                            <textarea
+                              value={serviceClinicalApproach}
+                              onChange={(e) => setServiceClinicalApproach(e.target.value)}
+                              placeholder="Explica en detalle tu enfoque terapéutico para este servicio..."
+                              rows={4}
+                              className="w-full text-sm bg-surface-container-lowest border border-outline-variant/35 rounded-lg px-3.5 py-2.5 text-on-surface focus:outline-none focus:border-primary transition-colors"
+                            />
+                          </div>
+
+                          <div className="space-y-1.5 md:col-span-2">
+                            <label className="text-[11px] font-semibold text-on-surface-variant uppercase tracking-wider">Descripción SEO</label>
+                            <textarea
+                              value={serviceSeoDescription}
+                              onChange={(e) => setServiceSeoDescription(e.target.value)}
+                              placeholder="Descripción optimizada para Google..."
+                              rows={2}
+                              className="w-full text-sm bg-surface-container-lowest border border-outline-variant/35 rounded-lg px-3.5 py-2.5 text-on-surface focus:outline-none focus:border-primary transition-colors"
+                            />
+                          </div>
+
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:col-span-2">
+                            <div className="space-y-1.5">
+                              <label className="text-[11px] font-semibold text-on-surface-variant uppercase tracking-wider">Icono (Lucide)</label>
+                              <div className="flex gap-2">
+                                <select
+                                  value={serviceIcon}
+                                  onChange={(e) => setServiceIcon(e.target.value)}
+                                  className="bg-surface-container-lowest border border-outline-variant/35 rounded-lg px-2 py-2 text-sm text-on-surface focus:outline-none focus:border-primary transition-colors"
+                                >
+                                  <option value="User">Usuario (User)</option>
+                                  <option value="Users">Grupo (Users)</option>
+                                  <option value="Globe">Mundial (Globe)</option>
+                                  <option value="Heart">Corazón (Heart)</option>
+                                  <option value="Brain">Cerebro (Brain)</option>
+                                  <option value="Smile">Sonrisa (Smile)</option>
+                                  <option value="Activity">Actividad (Activity)</option>
+                                  <option value="Briefcase">Maletín (Briefcase)</option>
+                                  <option value="Calendar">Calendario (Calendar)</option>
+                                </select>
+                                <input
+                                  type="text"
+                                  value={serviceIcon}
+                                  onChange={(e) => setServiceIcon(e.target.value)}
+                                  placeholder="Escribe otro icono..."
+                                  className="w-full text-sm bg-surface-container-lowest border border-outline-variant/35 rounded-lg px-3.5 py-2 text-on-surface focus:outline-none focus:border-primary transition-colors"
+                                />
+                              </div>
+                            </div>
+
+                            <div className="space-y-1.5">
+                              <label className="text-[11px] font-semibold text-on-surface-variant uppercase tracking-wider">Color de Contenedor</label>
+                              <div className="flex items-center gap-3">
+                                <input
+                                  type="color"
+                                  value={serviceColor && serviceColor.startsWith('#') ? serviceColor : '#2A9D8F'}
+                                  onChange={(e) => setServiceColor(e.target.value)}
+                                  className="w-10 h-10 border border-outline-variant/35 rounded cursor-pointer p-0 bg-transparent"
+                                />
+                                <input
+                                  type="text"
+                                  value={serviceColor}
+                                  onChange={(e) => setServiceColor(e.target.value)}
+                                  placeholder="#2A9D8F"
+                                  className="w-full text-sm bg-surface-container-lowest border border-outline-variant/35 rounded-lg px-3.5 py-2.5 text-on-surface focus:outline-none focus:border-primary transition-colors font-mono"
+                                />
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="space-y-1.5 md:col-span-2">
+                            <label className="text-[11px] font-semibold text-on-surface-variant uppercase tracking-wider">Imagen del Servicio (Optimizado WebP)</label>
+                            <div className="flex flex-col md:flex-row items-center gap-4 p-4 bg-surface-container-lowest border border-outline-variant/25 rounded-lg">
+                              {serviceImageUrl && (
+                                <img
+                                  src={serviceImageUrl}
+                                  alt="Preview de servicio"
+                                  className="w-20 h-20 object-cover rounded-lg border border-outline-variant/30"
+                                />
+                              )}
+                              <div className="flex-1 space-y-1 text-left">
+                                <input
+                                  type="file"
+                                  accept="image/*"
+                                  onChange={handleServiceImageUpload}
+                                  className="text-xs text-on-surface-variant file:mr-4 file:py-1.5 file:px-3 file:rounded-md file:border-0 file:text-xs file:font-semibold file:bg-primary/10 file:text-primary hover:file:bg-primary/20"
+                                />
+                                <p className="text-[10px] text-on-surface-variant/75 font-sans">
+                                  {isUploadingServiceImage ? 'Convirtiendo y subiendo a WebP...' : 'Cualquier imagen se convertirá a WebP y se comprimirá automáticamente.'}
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-3 pt-2 md:col-span-2">
                             <input
                               type="checkbox"
                               id="serviceActive"
@@ -2681,7 +2899,7 @@ export default function Perfil() {
                               </button>
                               <button
                                 type="button"
-                                onClick={() => handleDeleteService(srv.id, srv.title)}
+                                onClick={() => handleDeleteService(srv.id, srv.title, srv.image_url)}
                                 className="p-1.5 hover:bg-error/10 rounded text-on-surface-variant hover:text-error transition-colors cursor-pointer"
                                 title="Eliminar"
                               >
