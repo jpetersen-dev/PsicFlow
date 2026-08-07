@@ -14,6 +14,7 @@ PsicFlow is a multi-tenant SaaS clinical management platform. The ecosystem comp
    - Role: Public landing page and booking flow for Jonathan's primary clinic. Interacts with PsicFlow APIs.
    - Port: `3000` (Local)
    - Public URL: `sentidomigrante.com`
+   - **CMS Architecture**: PsicFlow is the primary Headless CMS for this landing page. Content such as services, articles, reviews, and clinical specialists are served dynamically via the PsicFlow Integration APIs. Strapi CMS has been completely deprecated and removed. DO NOT write or expect Strapi integrations.
 2. **Clinician SaaS App (`psic-flow-app`)**:
    - Repository: `jpetersen-dev/PsicFlow` (inside `apps/app`)
    - Role: Main SaaS interface for therapists, clinic admins, and reports.
