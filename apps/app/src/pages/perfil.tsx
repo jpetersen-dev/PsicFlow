@@ -138,6 +138,14 @@ export default function Perfil() {
   const [serviceImageUrl, setServiceImageUrl] = useState('');
   const [isUploadingServiceImage, setIsUploadingServiceImage] = useState(false);
   const [serviceAlternatePrices, setServiceAlternatePrices] = useState<any[]>([]);
+  const [serviceSeoTitle, setServiceSeoTitle] = useState('');
+  const [serviceJsonLd, setServiceJsonLd] = useState('');
+  const [serviceWhatWeWork, setServiceWhatWeWork] = useState<any[]>([
+    { title: '', desc: '' },
+    { title: '', desc: '' },
+    { title: '', desc: '' },
+    { title: '', desc: '' }
+  ]);
 
   // Team Management states
   const [activeTenantId, setActiveTenantId] = useState<string | null>(null);
@@ -1466,6 +1474,17 @@ export default function Perfil() {
       return;
     }
 
+    // Validate JSON-LD
+    let parsedJsonLd = null;
+    if (serviceJsonLd.trim()) {
+      try {
+        parsedJsonLd = JSON.parse(serviceJsonLd.trim());
+      } catch (err: any) {
+        alert('El JSON-LD ingresado no es un JSON válido. Por favor verifícalo. Error: ' + err.message);
+        return;
+      }
+    }
+
     setIsSavingService(true);
     try {
       const payload: any = {
@@ -1482,7 +1501,10 @@ export default function Perfil() {
         seo_description: serviceSeoDescription.trim() || null,
         icon: serviceIcon || null,
         color: serviceColor || null,
-        alternate_prices: serviceAlternatePrices || []
+        alternate_prices: serviceAlternatePrices || [],
+        seo_title: serviceSeoTitle.trim() || null,
+        json_ld: parsedJsonLd,
+        what_we_work: serviceWhatWeWork
       };
 
       if (editingService && editingService.id) {
@@ -1515,6 +1537,14 @@ export default function Perfil() {
       setServiceColor('#2A9D8F');
       setServiceImageUrl('');
       setServiceAlternatePrices([]);
+      setServiceSeoTitle('');
+      setServiceJsonLd('');
+      setServiceWhatWeWork([
+        { title: '', desc: '' },
+        { title: '', desc: '' },
+        { title: '', desc: '' },
+        { title: '', desc: '' }
+      ]);
 
       await fetchServices();
     } catch (err: any) {
@@ -1539,6 +1569,16 @@ export default function Perfil() {
     setServiceColor(srv.color || '#2A9D8F');
     setServiceImageUrl(srv.image_url || '');
     setServiceAlternatePrices(srv.alternate_prices || []);
+    setServiceSeoTitle(srv.seo_title || '');
+    setServiceJsonLd(srv.json_ld ? JSON.stringify(srv.json_ld, null, 2) : '');
+    
+    let whatWeWork = srv.what_we_work || [];
+    if (!Array.isArray(whatWeWork)) whatWeWork = [];
+    const padded = [...whatWeWork];
+    while (padded.length < 4) {
+      padded.push({ title: '', desc: '' });
+    }
+    setServiceWhatWeWork(padded.slice(0, 4));
   };
 
   const handleNewServiceClick = () => {
@@ -1556,6 +1596,14 @@ export default function Perfil() {
     setServiceColor('#2A9D8F');
     setServiceImageUrl('');
     setServiceAlternatePrices([]);
+    setServiceSeoTitle('');
+    setServiceJsonLd('');
+    setServiceWhatWeWork([
+      { title: '', desc: '' },
+      { title: '', desc: '' },
+      { title: '', desc: '' },
+      { title: '', desc: '' }
+    ]);
   };
 
   const handleServiceImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -2862,6 +2910,73 @@ export default function Perfil() {
                               rows={2}
                               className="w-full text-sm bg-surface-container-lowest border border-outline-variant/35 rounded-lg px-3.5 py-2.5 text-on-surface focus:outline-none focus:border-primary transition-colors"
                             />
+                          </div>
+
+                          <div className="space-y-1.5 md:col-span-2">
+                            <label className="text-[11px] font-semibold text-on-surface-variant uppercase tracking-wider">Título SEO</label>
+                            <input
+                              type="text"
+                              value={serviceSeoTitle}
+                              onChange={(e) => setServiceSeoTitle(e.target.value)}
+                              placeholder="Ej. Entrevista de Orientación Psicológica Gratuita | Sentido Migrante"
+                              className="w-full text-sm bg-surface-container-lowest border border-outline-variant/35 rounded-lg px-3.5 py-2.5 text-on-surface focus:outline-none focus:border-primary transition-colors"
+                            />
+                          </div>
+
+                          <div className="space-y-1.5 md:col-span-2">
+                            <label className="text-[11px] font-semibold text-on-surface-variant uppercase tracking-wider">JSON-LD Estructurado (Schema.org)</label>
+                            <textarea
+                              value={serviceJsonLd}
+                              onChange={(e) => setServiceJsonLd(e.target.value)}
+                              placeholder='{"@context": "https://schema.org", "@type": "Service", ...}'
+                              rows={6}
+                              className="w-full text-sm font-mono bg-surface-container-lowest border border-outline-variant/35 rounded-lg px-3.5 py-2.5 text-on-surface focus:outline-none focus:border-primary transition-colors"
+                            />
+                          </div>
+
+                          <div className="space-y-3 md:col-span-2 p-4 bg-surface-container-low rounded-xl border border-outline-variant/20">
+                            <div>
+                              <h4 className="text-xs font-bold text-on-surface uppercase tracking-wider">¿Qué trabajamos en estas sesiones? (4 Puntos Clave)</h4>
+                              <p className="text-[11px] text-on-surface-variant">Configura los 4 puntos destacados que se abordarán en las sesiones de este servicio.</p>
+                            </div>
+
+                            <div className="space-y-4">
+                              {serviceWhatWeWork.map((item, index) => (
+                                <div key={index} className="p-3 bg-surface-container-lowest border border-outline-variant/25 rounded-lg space-y-2">
+                                  <span className="text-[10px] font-bold text-primary uppercase">Punto {index + 1}</span>
+                                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                                    <div className="space-y-1 md:col-span-1">
+                                      <label className="text-[10px] font-semibold text-on-surface-variant uppercase">Título</label>
+                                      <input
+                                        type="text"
+                                        value={item.title || ''}
+                                        onChange={(e) => {
+                                          const updated = [...serviceWhatWeWork];
+                                          updated[index] = { ...updated[index], title: e.target.value };
+                                          setServiceWhatWeWork(updated);
+                                        }}
+                                        placeholder="Ej. Duelo Migratorio"
+                                        className="w-full text-xs bg-surface-container-lowest border border-outline-variant/35 rounded-md px-2 py-1.5 text-on-surface focus:outline-none focus:border-primary"
+                                      />
+                                    </div>
+                                    <div className="space-y-1 md:col-span-2">
+                                      <label className="text-[10px] font-semibold text-on-surface-variant uppercase">Descripción</label>
+                                      <input
+                                        type="text"
+                                        value={item.desc || ''}
+                                        onChange={(e) => {
+                                          const updated = [...serviceWhatWeWork];
+                                          updated[index] = { ...updated[index], desc: e.target.value };
+                                          setServiceWhatWeWork(updated);
+                                        }}
+                                        placeholder="Ej. Elaboración de las 7 dimensiones..."
+                                        className="w-full text-xs bg-surface-container-lowest border border-outline-variant/35 rounded-md px-2.5 py-1.5 text-on-surface focus:outline-none focus:border-primary"
+                                      />
+                                    </div>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
                           </div>
 
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:col-span-2">
