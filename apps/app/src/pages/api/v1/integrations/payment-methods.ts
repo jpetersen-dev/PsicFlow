@@ -29,7 +29,7 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
     // 2. Fetch booking settings
     const { data: settings, error: settingsErr } = await supabase
       .from('booking_settings')
-      .select('currency, payment_links, bank_transfer_details, terms_text')
+      .select('currency, payment_links, bank_transfer_details, terms_text, sandbox_mode')
       .eq('organization_id', organizationId)
       .maybeSingle();
 
@@ -45,6 +45,7 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
         terms_text: '',
         payment_links: {},
         bank_transfer_details: {},
+        sandbox_mode: true,
         active_gateways: []
       });
     }
@@ -87,6 +88,7 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
       terms_text: settings.terms_text || '',
       payment_links: settings.payment_links || {},
       bank_transfer_details: settings.bank_transfer_details || {},
+      sandbox_mode: settings.sandbox_mode ?? true,
       active_gateways: activeGateways
     });
   } catch (error: any) {
