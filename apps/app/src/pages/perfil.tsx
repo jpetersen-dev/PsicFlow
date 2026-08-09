@@ -50,12 +50,11 @@ export default function Perfil() {
   const [termsText, setTermsText] = useState('');
   const [sandboxMode, setSandboxMode] = useState(false);
   
-  // Lemon Squeezy Credentials
-  const [lsActive, setLsActive] = useState(false);
-  const [lsStoreId, setLsStoreId] = useState('');
-  const [lsVariantId, setLsVariantId] = useState('');
-  const [lsApiKey, setLsApiKey] = useState('');
-  const [lsWebhookSecret, setLsWebhookSecret] = useState('');
+  // PayPal Credentials
+  const [paypalActive, setPaypalActive] = useState(false);
+  const [paypalClientId, setPaypalClientId] = useState('');
+  const [paypalClientSecret, setPaypalClientSecret] = useState('');
+  const [paypalWebhookId, setPaypalWebhookId] = useState('');
   const [organization, setOrganization] = useState<any>(null);
   const [userClinics, setUserClinics] = useState<any[]>([]);
   
@@ -116,8 +115,8 @@ export default function Perfil() {
   // Tab & UI configuration states
   const [activeMainTab, setActiveMainTab] = useState<'profile' | 'booking' | 'integrations' | 'security' | 'clinics' | 'webhooks'>('profile');
   const [activeBookingTab, setActiveBookingTab] = useState<'general' | 'gateways' | 'services'>('general');
-  const [showLsApiKey, setShowLsApiKey] = useState(false);
-  const [showLsWebhookSecret, setShowLsWebhookSecret] = useState(false);
+  const [showPaypalClientSecret, setShowPaypalClientSecret] = useState(false);
+  const [showPaypalWebhookId, setShowPaypalWebhookId] = useState(false);
 
   // Services states
   const [services, setServices] = useState<any[]>([]);
@@ -1101,19 +1100,17 @@ export default function Perfil() {
 
       if (!gatewaysError && gatewaysData) {
         // Reset states
-        setLsActive(false);
-        setLsStoreId('');
-        setLsVariantId('');
-        setLsApiKey('');
-        setLsWebhookSecret('');
+        setPaypalActive(false);
+        setPaypalClientId('');
+        setPaypalClientSecret('');
+        setPaypalWebhookId('');
 
         gatewaysData.forEach((g: any) => {
-          if (g.provider === 'lemonsqueezy') {
-            setLsActive(g.is_active);
-            setLsStoreId(g.credentials?.storeId || '');
-            setLsVariantId(g.credentials?.variantId || '');
-            setLsApiKey(g.credentials?.apiKey || '');
-            setLsWebhookSecret(g.credentials?.webhookSecret || '');
+          if (g.provider === 'paypal') {
+            setPaypalActive(g.is_active);
+            setPaypalClientId(g.credentials?.clientId || '');
+            setPaypalClientSecret(g.credentials?.clientSecret || '');
+            setPaypalWebhookId(g.credentials?.webhookId || '');
           }
         });
       }
@@ -1380,13 +1377,12 @@ export default function Perfil() {
         .from('organization_payment_gateways')
         .upsert({
           organization_id: activeTenant,
-          provider: 'lemonsqueezy',
-          is_active: lsActive,
+          provider: 'paypal',
+          is_active: paypalActive,
           credentials: {
-            storeId: lsStoreId.trim(),
-            variantId: lsVariantId.trim(),
-            apiKey: lsApiKey.trim(),
-            webhookSecret: lsWebhookSecret.trim()
+            clientId: paypalClientId.trim(),
+            clientSecret: paypalClientSecret.trim(),
+            webhookId: paypalWebhookId.trim()
           }
         }, { onConflict: 'organization_id,provider' });
 
@@ -2529,7 +2525,7 @@ export default function Perfil() {
                 {activeBookingTab === 'gateways' && (
                   <div className="space-y-6 animate-in fade-in duration-200">
                     
-                    {/* Lemon Squeezy Integration Card */}
+                    {/* PayPal Integration Card */}
                     <div className="p-6 bg-surface-container-low rounded-2xl border border-outline-variant/20 space-y-6">
                       <div className="flex items-center justify-between border-b border-outline-variant/15 pb-4">
                         <div className="flex items-center gap-3">
@@ -2537,115 +2533,96 @@ export default function Perfil() {
                             <CreditCard className="w-6 h-6" />
                           </div>
                           <div>
-                            <h4 className="font-label-md text-sm text-on-surface font-bold">Pasarela Lemon Squeezy</h4>
-                            <p className="text-[11px] text-on-surface-variant">Merchant of Record integrado. Lemon Squeezy gestiona impuestos e IVA global por ti.</p>
+                            <h4 className="font-label-md text-sm text-on-surface font-bold">Pasarela PayPal Business</h4>
+                            <p className="text-[11px] text-on-surface-variant">Cobro in-context mediante Smart Payment Buttons. Los fondos se acreditan directo en tu cuenta.</p>
                           </div>
                         </div>
                         <label className="relative inline-flex items-center cursor-pointer shrink-0">
                           <input 
                             type="checkbox" 
-                            checked={lsActive}
-                            onChange={(e) => setLsActive(e.target.checked)}
+                            checked={paypalActive}
+                            onChange={(e) => setPaypalActive(e.target.checked)}
                             className="sr-only peer" 
                           />
                           <div className="w-10 h-6 bg-outline-variant/40 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary"></div>
                         </label>
                       </div>
 
-                      {lsActive && (
+                      {paypalActive && (
                         <div className="space-y-5">
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-5 p-5 bg-surface-container-lowest rounded-2xl border border-outline-variant/10">
+                          <div className="grid grid-cols-1 gap-5 p-5 bg-surface-container-lowest rounded-2xl border border-outline-variant/10">
                             
                             <div className="space-y-1.5">
                               <label className="flex items-center gap-1.5 text-[10px] font-bold text-on-surface-variant uppercase tracking-wider">
-                                <span>Lemon Squeezy Store ID</span>
+                                <span>PayPal Client ID</span>
                                 <div className="group relative cursor-pointer">
                                   <Info className="w-3.5 h-3.5 text-on-surface-variant/70 hover:text-primary" />
                                   <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-64 p-2.5 bg-neutral-900 text-white text-[11px] rounded-lg shadow-lg opacity-0 pointer-events-none group-hover:opacity-100 transition-opacity z-50 leading-relaxed normal-case font-normal">
-                                    Identificador numérico de tu tienda en Lemon Squeezy (ej: 438567).
+                                    Identificador público (Client ID) de tu aplicación de PayPal Developer.
                                   </div>
                                 </div>
                               </label>
                               <input 
                                 type="text" 
-                                value={lsStoreId}
-                                onChange={(e) => setLsStoreId(e.target.value)}
-                                placeholder="e.g. 438567"
+                                value={paypalClientId}
+                                onChange={(e) => setPaypalClientId(e.target.value)}
+                                placeholder="e.g. Aet4Yvj..."
                                 className="w-full bg-surface-container-low border border-outline-variant/20 rounded-lg px-3 py-2 text-xs focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary text-on-surface font-mono"
                               />
                             </div>
 
                             <div className="space-y-1.5">
                               <label className="flex items-center gap-1.5 text-[10px] font-bold text-on-surface-variant uppercase tracking-wider">
-                                <span>Default Variant ID</span>
+                                <span>PayPal Client Secret</span>
                                 <div className="group relative cursor-pointer">
                                   <Info className="w-3.5 h-3.5 text-on-surface-variant/70 hover:text-primary" />
                                   <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-64 p-2.5 bg-neutral-900 text-white text-[11px] rounded-lg shadow-lg opacity-0 pointer-events-none group-hover:opacity-100 transition-opacity z-50 leading-relaxed normal-case font-normal">
-                                    Identificador del producto/variante por defecto para las reservas (ej: 1945659).
-                                  </div>
-                                </div>
-                              </label>
-                              <input 
-                                type="text" 
-                                value={lsVariantId}
-                                onChange={(e) => setLsVariantId(e.target.value)}
-                                placeholder="e.g. 1945659"
-                                className="w-full bg-surface-container-low border border-outline-variant/20 rounded-lg px-3 py-2 text-xs focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary text-on-surface font-mono"
-                              />
-                            </div>
-
-                            <div className="space-y-1.5 md:col-span-2">
-                              <label className="flex items-center gap-1.5 text-[10px] font-bold text-on-surface-variant uppercase tracking-wider">
-                                <span>API Key (Opcional)</span>
-                                <div className="group relative cursor-pointer">
-                                  <Info className="w-3.5 h-3.5 text-on-surface-variant/70 hover:text-primary" />
-                                  <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-64 p-2.5 bg-neutral-900 text-white text-[11px] rounded-lg shadow-lg opacity-0 pointer-events-none group-hover:opacity-100 transition-opacity z-50 leading-relaxed normal-case font-normal">
-                                    Clave de API privada de Lemon Squeezy. Si se deja vacía, se utilizará la clave global de la plataforma.
+                                    Secreto privado (Client Secret) de tu aplicación de PayPal. Se almacena de forma segura.
                                   </div>
                                 </div>
                               </label>
                               <div className="relative flex items-center">
                                 <input 
-                                  type={showLsApiKey ? 'text' : 'password'}
-                                  value={lsApiKey}
-                                  onChange={(e) => setLsApiKey(e.target.value)}
-                                  placeholder="ls_..."
+                                  type={showPaypalClientSecret ? 'text' : 'password'}
+                                  value={paypalClientSecret}
+                                  onChange={(e) => setPaypalClientSecret(e.target.value)}
+                                  placeholder="Secret Key"
                                   className="w-full bg-surface-container-low border border-outline-variant/20 rounded-lg pl-3 pr-10 py-2 text-xs focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary text-on-surface font-mono"
                                 />
                                 <button
                                   type="button"
-                                  onClick={() => setShowLsApiKey(!showLsApiKey)}
+                                  onClick={() => setShowPaypalClientSecret(!showPaypalClientSecret)}
                                   className="absolute right-3 text-on-surface-variant hover:text-primary cursor-pointer transition-colors"
                                 >
-                                  {showLsApiKey ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                                  {showPaypalClientSecret ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
                                 </button>
                               </div>
                             </div>
 
-                            <div className="space-y-1.5 md:col-span-2">
+                            <div className="space-y-1.5">
                               <label className="flex items-center gap-1.5 text-[10px] font-bold text-on-surface-variant uppercase tracking-wider">
-                                <span>Webhook Secret (Opcional)</span>
+                                <span>PayPal Webhook ID</span>
                                 <div className="group relative cursor-pointer">
                                   <Info className="w-3.5 h-3.5 text-on-surface-variant/70 hover:text-primary" />
                                   <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-64 p-2.5 bg-neutral-900 text-white text-[11px] rounded-lg shadow-lg opacity-0 pointer-events-none group-hover:opacity-100 transition-opacity z-50 leading-relaxed normal-case font-normal">
-                                    Firma secreta para validar eventos de Webhooks de Lemon Squeezy en tu servidor.
+                                    ID del Webhook configurado en PayPal para recibir notificaciones (PAYMENT.CAPTURE.COMPLETED).
                                   </div>
                                 </div>
                               </label>
                               <div className="relative flex items-center">
                                 <input 
-                                  type={showLsWebhookSecret ? 'text' : 'password'}
-                                  value={lsWebhookSecret}
-                                  onChange={(e) => setLsWebhookSecret(e.target.value)}
-                                  placeholder="Secreto de firma"
+                                  type={showPaypalWebhookId ? 'text' : 'password'}
+                                  value={paypalWebhookId}
+                                  onChange={(e) => setPaypalWebhookId(e.target.value)}
+                                  placeholder="e.g. WH-..."
                                   className="w-full bg-surface-container-low border border-outline-variant/20 rounded-lg pl-3 pr-10 py-2 text-xs focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary text-on-surface font-mono"
                                 />
                                 <button
                                   type="button"
-                                  onClick={() => setShowLsWebhookSecret(!showLsWebhookSecret)}
+                                  onClick={() => setShowPaypalWebhookId(!showPaypalWebhookId)}
                                   className="absolute right-3 text-on-surface-variant hover:text-primary cursor-pointer transition-colors"
                                 >
-                                  {showLsWebhookSecret ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                                  {showPaypalWebhookId ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
                                 </button>
                               </div>
                             </div>
@@ -2773,7 +2750,7 @@ export default function Perfil() {
                                     {
                                       price: 0,
                                       currency: 'EUR',
-                                      gateway_details: lsActive ? { store_id: lsStoreId || '', variant_id: '' } : {}
+                                      gateway_details: {}
                                     }
                                   ]);
                                 }}
@@ -2833,45 +2810,6 @@ export default function Perfil() {
                                           className="w-full text-xs bg-surface-container-lowest border border-outline-variant/35 rounded-md px-2.5 py-1.5 text-on-surface focus:outline-none focus:border-primary"
                                         />
                                       </div>
-
-                                      {lsActive && (
-                                        <div className="space-y-2 md:col-span-3 border-t border-outline-variant/10 pt-2.5 grid grid-cols-2 gap-2">
-                                          <div className="space-y-1">
-                                            <label className="text-[9px] font-bold text-on-surface-variant uppercase tracking-wider">Lemon Squeezy Store ID</label>
-                                            <input
-                                              type="text"
-                                              value={altPrice.gateway_details?.store_id || ''}
-                                              onChange={(e) => {
-                                                const updated = [...serviceAlternatePrices];
-                                                updated[index].gateway_details = {
-                                                  ...updated[index].gateway_details,
-                                                  store_id: e.target.value
-                                                };
-                                                setServiceAlternatePrices(updated);
-                                              }}
-                                              placeholder={lsStoreId || "Ej. 438567"}
-                                              className="w-full text-[11px] bg-surface-container-lowest border border-outline-variant/35 rounded-md px-2 py-1 text-on-surface font-mono"
-                                            />
-                                          </div>
-                                          <div className="space-y-1">
-                                            <label className="text-[9px] font-bold text-on-surface-variant uppercase tracking-wider">Lemon Squeezy Variant ID</label>
-                                            <input
-                                              type="text"
-                                              value={altPrice.gateway_details?.variant_id || ''}
-                                              onChange={(e) => {
-                                                const updated = [...serviceAlternatePrices];
-                                                updated[index].gateway_details = {
-                                                  ...updated[index].gateway_details,
-                                                  variant_id: e.target.value
-                                                };
-                                                setServiceAlternatePrices(updated);
-                                              }}
-                                              placeholder="Ej. 1945659"
-                                              className="w-full text-[11px] bg-surface-container-lowest border border-outline-variant/35 rounded-md px-2 py-1 text-on-surface font-mono"
-                                            />
-                                          </div>
-                                        </div>
-                                      )}
                                     </div>
                                   );
                                 })}

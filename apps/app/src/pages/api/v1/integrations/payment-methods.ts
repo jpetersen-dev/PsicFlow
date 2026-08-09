@@ -5,6 +5,7 @@ import { allowCors } from '../../../../utils/cors';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
 
 async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'GET') {
@@ -22,7 +23,8 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
   const organizationId = validation.organization_id;
 
   try {
-    const supabase = createClient(supabaseUrl, supabaseAnonKey);
+    const dbKey = supabaseServiceKey || supabaseAnonKey;
+    const supabase = createClient(supabaseUrl, dbKey);
 
     // 2. Fetch booking settings
     const { data: settings, error: settingsErr } = await supabase
@@ -64,7 +66,9 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
       const publicCreds: Record<string, any> = {};
       
       if (g.credentials) {
-        if (g.provider === 'lemonsqueezy') {
+        if (g.provider === 'paypal') {
+          publicCreds.clientId = g.credentials.clientId || null;
+        } else if (g.provider === 'lemonsqueezy') {
           publicCreds.storeId = g.credentials.storeId || null;
           publicCreds.variantId = g.credentials.variantId || null;
         }

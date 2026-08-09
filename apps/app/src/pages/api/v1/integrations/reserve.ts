@@ -46,7 +46,20 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
   }
 
   try {
-    const supabase = createClient(supabaseUrl, supabaseAnonKey);
+    const dbKey = process.env.SUPABASE_SERVICE_ROLE_KEY || supabaseAnonKey;
+    const supabase = createClient(supabaseUrl, dbKey);
+
+    const { cancel_session_id } = req.body;
+
+    if (cancel_session_id && typeof cancel_session_id === 'string') {
+      console.log(`[Reserve API] Releasing previous pending session: ${cancel_session_id}`);
+      await supabase
+        .from('sessions')
+        .delete()
+        .eq('id', cancel_session_id)
+        .eq('organization_id', organizationId)
+        .eq('status_payment', 'Pendiente');
+    }
 
     // 2. Fetch booking prefix dynamically
     const { data: settings } = await supabase
