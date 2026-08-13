@@ -7,7 +7,11 @@ import {
   Calendar,
   Plus,
   User,
-  LogOut
+  LogOut,
+  BookOpen,
+  MessageSquare,
+  Download,
+  Sparkles
 } from 'lucide-react';
 import { supabase } from '../lib/supabaseClient';
 import { LogoSymbol } from './LogoSymbol';
@@ -145,7 +149,7 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
   // Path guard for prospecto patients
   useEffect(() => {
     if (profile && profile.status === 'prospecto') {
-      const restrictedPaths = ['/sesiones', '/perfil'];
+      const restrictedPaths = ['/sesiones', '/perfil', '/bitacoras', '/recursos', '/mensajes', '/autocuidado'];
       if (restrictedPaths.includes(router.pathname)) {
         router.push('/');
       }
@@ -156,6 +160,10 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
     { name: 'Mi Portal', href: '/', icon: LayoutDashboard },
     { name: 'Mis Citas', href: '/sesiones', icon: Calendar, restricted: true },
     { name: 'Agendar Cita', href: '/agendar', icon: Plus },
+    { name: 'Bitácoras', href: '/bitacoras', icon: BookOpen, restricted: true },
+    { name: 'Recursos', href: '/recursos', icon: Download, restricted: true },
+    { name: 'Mensajes', href: '/mensajes', icon: MessageSquare, restricted: true },
+    { name: 'Autocuidado', href: '/autocuidado', icon: Sparkles, restricted: true },
     { name: 'Mi Perfil', href: '/perfil', icon: User, restricted: true },
   ].filter(item => !item.restricted || profile?.status !== 'prospecto');
 

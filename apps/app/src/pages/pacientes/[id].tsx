@@ -37,7 +37,7 @@ const COMMON_DIAGNOSTICS = [
   { code: 'F10.2', description: 'Síndrome de dependencia del alcohol' }
 ];
 
-type TabType = 'resumen' | 'plan' | 'sesiones' | 'sintomas' | 'epicrisis' | 'archivos';
+type TabType = 'resumen' | 'plan' | 'sesiones' | 'sintomas' | 'epicrisis' | 'archivos' | 'bitacoras' | 'mensajes';
 
 export default function PacienteFicha() {
   const router = useRouter();
@@ -57,6 +57,98 @@ export default function PacienteFicha() {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
+
+  // Extended patient portal clinical states
+  const [journals, setJournals] = useState<any[]>([]);
+  const [journalsLoading, setJournalsLoading] = useState(false);
+  const [chatMessages, setChatMessages] = useState<any[]>([]);
+  const [chatLoading, setChatLoading] = useState(false);
+  const [newReply, setNewReply] = useState('');
+  const [replying, setReplying] = useState(false);
+
+  const fetchSharedJournals = async () => {
+    if (!id) return;
+    setJournalsLoading(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch(`/api/v1/booking/journals?patientId=${id}`, {
+        headers: {
+          Authorization: `Bearer ${session?.access_token}`,
+          'x-tenant-id': patient?.organization_id || localStorage.getItem('active-tenant-id') || ''
+        }
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setJournals(data.journals || []);
+      }
+    } catch (err) {
+      console.error('Error fetching patient journals:', err);
+    } finally {
+      setJournalsLoading(false);
+    }
+  };
+
+  const fetchChatMessages = async () => {
+    if (!id) return;
+    setChatLoading(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch(`/api/v1/booking/messages?patientId=${id}`, {
+        headers: {
+          Authorization: `Bearer ${session?.access_token}`,
+          'x-tenant-id': patient?.organization_id || localStorage.getItem('active-tenant-id') || ''
+        }
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setChatMessages(data.messages || []);
+      }
+    } catch (err) {
+      console.error('Error fetching chat messages:', err);
+    } finally {
+      setChatLoading(false);
+    }
+  };
+
+  const handleSendReply = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newReply.trim() || !id) return;
+    setReplying(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch('/api/v1/booking/messages', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session?.access_token}`,
+          'x-tenant-id': patient?.organization_id || localStorage.getItem('active-tenant-id') || ''
+        },
+        body: JSON.stringify({
+          patientId: id,
+          content: newReply.trim()
+        })
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setNewReply('');
+        await fetchChatMessages();
+      } else {
+        alert(data.error || 'Error al enviar el mensaje.');
+      }
+    } catch (err: any) {
+      alert('Error de conexión: ' + err.message);
+    } finally {
+      setReplying(false);
+    }
+  };
+
+  useEffect(() => {
+    if (activeTab === 'bitacoras') {
+      fetchSharedJournals();
+    } else if (activeTab === 'mensajes') {
+      fetchChatMessages();
+    }
+  }, [activeTab, id, patient]);
 
   // Editing state
   const [isEditing, setIsEditing] = useState(false);
@@ -608,7 +700,9 @@ export default function PacienteFicha() {
             { id: 'sesiones', label: 'Historial Sesiones', icon: Calendar },
             { id: 'sintomas', label: 'Sintomatología', icon: TrendingUp },
             { id: 'epicrisis', label: 'Epicrisis / Cierre', icon: FileCheck },
-            { id: 'archivos', label: 'Archivos', icon: FolderOpen }
+            { id: 'archivos', label: 'Archivos', icon: FolderOpen },
+            { id: 'bitacoras', label: 'Bitácoras', icon: BookOpen },
+            { id: 'mensajes', label: 'Mensajería', icon: Mail }
           ].map((tab) => {
             const Icon = tab.icon;
             return (
@@ -1608,6 +1702,127 @@ export default function PacienteFicha() {
                       </div>
                     </div>
                   ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Tab 7: Bitácoras (Shared Journals) */}
+          {activeTab === 'bitacoras' && (
+            <div className="space-y-6">
+              <div className="flex items-center justify-between border-b border-border-color pb-3">
+                <h3 className="text-sm font-semibold text-text-primary">Bitácoras Compartidas por el Paciente</h3>
+              </div>
+              {journalsLoading ? (
+                <div className="flex flex-col justify-center items-center py-8 gap-2">
+                  <div className="w-6 h-6 rounded-full border-2 border-accent-primary border-t-transparent animate-spin"></div>
+                  <p className="text-xs text-text-secondary">Cargando bitácoras...</p>
+                </div>
+              ) : journals.length === 0 ? (
+                <div className="py-12 text-center text-text-muted text-xs">El paciente no ha compartido ninguna bitácora aún.</div>
+              ) : (
+                <div className="space-y-4">
+                  {journals.map((journal) => (
+                    <div key={journal.id} className="bg-bg-input/40 border border-border-color p-5 rounded-2xl space-y-3">
+                      <div className="flex justify-between items-start">
+                        <div className="space-y-1">
+                          <h4 className="font-bold text-text-primary text-sm">{journal.title}</h4>
+                          <p className="text-[10px] text-text-muted">
+                            Escrito el {new Date(journal.created_at).toLocaleDateString('es-ES', {
+                              weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit'
+                            })}
+                          </p>
+                        </div>
+                        {journal.mood && (
+                          <span className={`px-2.5 py-0.5 rounded text-[10px] font-bold capitalize ${
+                            journal.mood === 'happy' ? 'bg-green-50 text-green-700 border border-green-200' :
+                            journal.mood === 'sad' ? 'bg-blue-50 text-blue-700 border border-blue-200' :
+                            journal.mood === 'anxious' ? 'bg-yellow-50 text-yellow-700 border border-yellow-200' :
+                            journal.mood === 'angry' ? 'bg-red-50 text-red-700 border border-red-200' :
+                            journal.mood === 'peaceful' ? 'bg-purple-50 text-purple-700 border border-purple-200' :
+                            'bg-gray-50 text-gray-700 border border-gray-200'
+                          }`}>
+                            Humor: {
+                              journal.mood === 'happy' ? 'Felicidad' :
+                              journal.mood === 'sad' ? 'Tristeza' :
+                              journal.mood === 'anxious' ? 'Ansiedad' :
+                              journal.mood === 'angry' ? 'Enojo' :
+                              journal.mood === 'peaceful' ? 'Calma' :
+                              'Neutral'
+                            }
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-xs text-text-secondary whitespace-pre-wrap leading-relaxed">{journal.content}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Tab 8: Mensajería */}
+          {activeTab === 'mensajes' && (
+            <div className="space-y-6">
+              <div className="flex items-center justify-between border-b border-border-color pb-3">
+                <h3 className="text-sm font-semibold text-text-primary">Canal de Comunicación</h3>
+              </div>
+              
+              {chatLoading ? (
+                <div className="flex flex-col justify-center items-center py-8 gap-2">
+                  <div className="w-6 h-6 rounded-full border-2 border-accent-primary border-t-transparent animate-spin"></div>
+                  <p className="text-xs text-text-secondary">Cargando conversación...</p>
+                </div>
+              ) : (
+                <div className="flex flex-col h-[500px] border border-border-color rounded-2xl bg-[#FCFBF9] overflow-hidden">
+                  {/* Messages list */}
+                  <div className="flex-1 overflow-y-auto p-4 space-y-4 animate-fade-in">
+                    {chatMessages.length === 0 ? (
+                      <div className="h-full flex items-center justify-center text-text-muted text-xs">No hay mensajes previos en este canal.</div>
+                    ) : (
+                      chatMessages.map((msg) => {
+                        const isMe = msg.sender === 'therapist';
+                        return (
+                          <div key={msg.id} className={`flex ${isMe ? 'justify-end' : 'justify-start'}`}>
+                            <div className={`max-w-[70%] rounded-2xl p-4 text-xs space-y-1.5 shadow-sm border ${
+                              isMe 
+                                ? 'bg-[#3E5C4E] text-white border-[#3E5C4E]' 
+                                : 'bg-white text-text-primary border-border-color'
+                            }`}>
+                              <p className="leading-relaxed whitespace-pre-wrap">{msg.content}</p>
+                              <div className="flex items-center justify-between gap-4 text-[9px] opacity-75">
+                                <span>
+                                  {new Date(msg.created_at).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
+                                </span>
+                                {isMe && (
+                                  <span>{msg.read ? 'Leído' : 'Enviado'}</span>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
+                  
+                  {/* Form input */}
+                  <form onSubmit={handleSendReply} className="border-t border-border-color p-4 bg-white flex gap-3">
+                    <input
+                      type="text"
+                      required
+                      value={newReply}
+                      onChange={(e) => setNewReply(e.target.value)}
+                      placeholder="Escribe una respuesta para el paciente..."
+                      className="flex-1 bg-[#F9F7F3] border border-[#F2EFE8] rounded-xl px-4 py-2.5 text-xs text-[#1C1917] focus:border-[#516750] focus:outline-none"
+                    />
+                    <button
+                      type="submit"
+                      disabled={replying || !newReply.trim()}
+                      className="bg-[#3E5C4E] hover:bg-[#354F43] disabled:opacity-50 text-white font-bold rounded-xl text-xs px-4 py-2.5 cursor-pointer transition-all"
+                    >
+                      {replying ? 'Enviando...' : 'Responder'}
+                    </button>
+                  </form>
                 </div>
               )}
             </div>

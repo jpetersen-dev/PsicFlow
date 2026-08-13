@@ -2,57 +2,140 @@ import React, { useState, useEffect } from 'react';
 import Head from 'next/head';
 import Link from 'next/link';
 import { supabase } from '../lib/supabaseClient';
-import { Calendar, Clock, BookOpen, User, ArrowRight, Video, FileText } from 'lucide-react';
+import { 
+  Calendar, 
+  Clock, 
+  BookOpen, 
+  User, 
+  ArrowRight, 
+  Video, 
+  FileText, 
+  Download, 
+  MessageSquare, 
+  Sparkles,
+  Heart,
+  Smile,
+  Frown,
+  Meh,
+  Activity,
+  ChevronRight,
+  CheckCircle2,
+  AlertCircle
+} from 'lucide-react';
 
 export default function PatientPortalHome() {
   const [patient, setPatient] = useState<any>(null);
   const [sessions, setSessions] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    const fetchPortalData = async () => {
-      try {
-        const { data: { session } } = await supabase.auth.getSession();
-        if (!session?.user?.id) return;
+  // New Dashboard States
+  const [recentResources, setRecentResources] = useState<any[]>([]);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [selectedMood, setSelectedMood] = useState<string>('');
+  const [moodText, setMoodText] = useState<string>('');
+  const [moodSaving, setMoodSaving] = useState(false);
+  const [moodSaved, setMoodSaved] = useState(false);
 
-        // Fetch patient profile
-        const { data: patData, error: patErr } = await supabase
-          .from('patients')
-          .select('*, organizations (name)')
-          .eq('user_id', session.user.id)
-          .limit(1)
-          .single();
+  const fetchPortalData = async () => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.user?.id) return;
 
-        if (patErr || !patData) {
-          console.error('Error fetching patient profile:', patErr);
-          setLoading(false);
-          return;
-        }
-        setPatient(patData);
+      // Fetch patient profile
+      const { data: patData, error: patErr } = await supabase
+        .from('patients')
+        .select('*, organizations (name)')
+        .eq('user_id', session.user.id)
+        .limit(1)
+        .single();
 
-        // Fetch patient sessions (upcoming ones first)
-        const { data: sessData, error: sessErr } = await supabase
-          .from('sessions')
-          .select('*, professional:professional_id (full_name, specialization, timezone)')
-          .eq('patient_id', patData.id)
-          .order('date_session', { ascending: true });
-
-        if (!sessErr && sessData) {
-          setSessions(sessData);
-        }
-      } catch (err) {
-        console.error('Unexpected error in patient portal:', err);
-      } finally {
+      if (patErr || !patData) {
+        console.error('Error fetching patient profile:', patErr);
         setLoading(false);
+        return;
       }
-    };
+      setPatient(patData);
 
+      // Fetch patient sessions (upcoming ones first)
+      const { data: sessData, error: sessErr } = await supabase
+        .from('sessions')
+        .select('*, professional:professional_id (full_name, specialization, timezone)')
+        .eq('patient_id', patData.id)
+        .order('date_session', { ascending: true });
+
+      if (!sessErr && sessData) {
+        setSessions(sessData);
+      }
+
+      // Fetch recent shared resources (limit 2)
+      const { data: filesData } = await supabase
+        .from('files_vault')
+        .select('*')
+        .or(`patient_id.eq.${patData.id},patient_id.is.null`)
+        .order('created_at', { ascending: false })
+        .limit(2);
+      if (filesData) {
+        setRecentResources(filesData);
+      }
+
+      // Fetch unread message count
+      const { count } = await supabase
+        .from('patient_messages')
+        .select('*', { count: 'exact', head: true })
+        .eq('patient_id', patData.id)
+        .eq('sender', 'therapist')
+        .eq('read', false);
+      setUnreadCount(count || 0);
+
+    } catch (err) {
+      console.error('Unexpected error in patient portal:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
     fetchPortalData();
   }, []);
 
+  const handleQuickMoodSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedMood || !patient) return;
+    setMoodSaving(true);
+
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch('/api/v1/booking/journals', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session?.access_token}`,
+          'x-tenant-id': patient.organization_id
+        },
+        body: JSON.stringify({
+          title: `Registro Rápido: Estado de Ánimo`,
+          content: moodText.trim() || `Registré mi estado de ánimo del día como: ${selectedMood}.`,
+          mood: selectedMood,
+          sharedWithTherapist: false
+        })
+      });
+
+      if (res.ok) {
+        setMoodSaved(true);
+        setMoodText('');
+        setSelectedMood('');
+        setTimeout(() => setMoodSaved(false), 3000);
+      }
+    } catch (err) {
+      console.error('Error saving quick mood:', err);
+    } finally {
+      setMoodSaving(false);
+    }
+  };
+
   if (loading) {
     return (
-      <div className="flex flex-col justify-center items-center py-12 gap-4">
+      <div className="flex flex-col justify-center items-center py-20 gap-4">
         <div className="w-8 h-8 rounded-full border-2 border-[#516750] border-t-transparent animate-spin"></div>
         <p className="text-sm text-[#78716C]">Cargando tu portal personal...</p>
       </div>
@@ -61,7 +144,7 @@ export default function PatientPortalHome() {
 
   if (!patient) {
     return (
-      <div className="max-w-md mx-auto text-center py-12 space-y-4">
+      <div className="max-w-md mx-auto text-center py-20 space-y-4">
         <h2 className="text-xl font-bold text-[#1C1917]">No se encontró registro de paciente</h2>
         <p className="text-sm text-[#78716C]">Tu usuario no está asociado a una ficha de paciente activa. Por favor contacta al administrador de la clínica.</p>
       </div>
@@ -84,32 +167,33 @@ export default function PatientPortalHome() {
         <title>Mi Portal - Sentido Migrante</title>
       </Head>
 
-      <div className="space-y-8">
+      <div className="space-y-8 pb-12">
         {/* Welcome Banner - Premium Forest Gradient */}
         <div className="bg-gradient-to-br from-[#1A3020] to-[#516750] text-white rounded-3xl p-8 md:p-10 shadow-lg relative overflow-hidden">
           <div className="absolute right-0 bottom-0 opacity-10 transform translate-x-12 translate-y-12">
             <Calendar size={300} />
           </div>
           <div className="relative z-10 max-w-xl space-y-3">
-            <span className="text-xs uppercase tracking-widest font-bold bg-white/20 px-3 py-1 rounded-full">
+            <span className="text-xs uppercase tracking-widest font-bold bg-white/20 px-3 py-1 rounded-full inline-block">
               Portal del Paciente
             </span>
             <h1 className="text-3xl md:text-4xl font-bold font-display leading-tight">
               ¡Hola, {patient.full_name.split(' ')[0]}!
             </h1>
             <p className="text-sm text-white/90 leading-relaxed font-light">
-              Bienvenido a tu espacio terapéutico en {patient.organizations?.name || 'Sentido Migrante'}. Aquí puedes revisar tus citas programadas, conectarte a tus sesiones virtuales y agendar nuevos horarios.
+              Bienvenido a tu espacio terapéutico en {patient.organizations?.name || 'Sentido Migrante'}. Aquí tienes acceso seguro e integral a tus citas, bitácoras y recursos clínicos.
             </p>
           </div>
         </div>
 
         {/* Bento Grid */}
         <div className="grid grid-cols-12 gap-6">
-          {/* Proxima Cita Section (7/12) */}
+          
+          {/* 1. Proxima Cita Section (7/12) */}
           <section className="col-span-12 lg:col-span-7 bg-white rounded-3xl p-6 border border-[#F2EFE8] shadow-sm flex flex-col justify-between">
             <div className="space-y-4">
-              <h2 className="text-lg font-bold text-[#1C1917] font-display flex items-center gap-2 border-b border-[#F2EFE8] pb-3">
-                <Calendar className="w-5 h-5 text-[#516750]" />
+              <h2 className="text-sm font-bold text-[#1C1917] font-display flex items-center gap-2 border-b border-[#F2EFE8] pb-3 uppercase tracking-wider text-text-muted">
+                <Calendar className="w-4 h-4 text-[#516750]" />
                 <span>Próxima Sesión Programada</span>
               </h2>
 
@@ -198,70 +282,174 @@ export default function PatientPortalHome() {
             )}
           </section>
 
-          {/* Quick Actions & Info (5/12) */}
-          <section className="col-span-12 lg:col-span-5 bg-white rounded-3xl p-6 border border-[#F2EFE8] shadow-sm space-y-6">
-            <h2 className="text-lg font-bold text-[#1C1917] font-display flex items-center gap-2 border-b border-[#F2EFE8] pb-3">
-              <BookOpen className="w-5 h-5 text-[#516750]" />
-              <span>Mi Ecosistema de Apoyo</span>
+          {/* 2. Mood Check-in Widget (5/12) */}
+          <section className="col-span-12 lg:col-span-5 bg-white rounded-3xl p-6 border border-[#F2EFE8] shadow-sm space-y-4">
+            <h2 className="text-sm font-bold text-[#1C1917] font-display flex items-center gap-2 border-b border-[#F2EFE8] pb-3 uppercase tracking-wider text-text-muted">
+              <Heart className="w-4 h-4 text-[#516750]" />
+              <span>¿Cómo te sientes hoy?</span>
             </h2>
 
-            <div className="grid grid-cols-1 gap-3">
-              {/* Agendar */}
-              <Link 
-                href="/agendar" 
-                className="flex items-center justify-between p-4 bg-[#F9F7F3] hover:bg-[#F2EFE8] border border-[#F2EFE8] rounded-2xl transition-all group"
-              >
-                <div className="flex items-center gap-3">
-                  <div className="p-2.5 bg-[#DAEDDF] text-[#1A3020] rounded-xl">
-                    <Calendar className="w-5 h-5" />
-                  </div>
-                  <div className="text-left">
-                    <h3 className="font-bold text-[#1C1917] text-xs">Agendar Consulta</h3>
-                    <p className="text-[10px] text-[#78716C]">Busca horarios libres con tu psicólogo</p>
-                  </div>
+            {moodSaved ? (
+              <div className="bg-[#DAEDDF] border border-[#A2BC97]/40 p-4 rounded-2xl flex items-center gap-3 text-xs text-[#1A3020] h-[150px] justify-center flex-col text-center">
+                <CheckCircle2 className="w-6 h-6 text-[#516750] shrink-0" />
+                <span>¡Bitácora rápida guardada con éxito!</span>
+              </div>
+            ) : (
+              <form onSubmit={handleQuickMoodSubmit} className="space-y-3">
+                <div className="flex justify-around items-center p-2 bg-[#F9F7F3] rounded-2xl border border-[#F2EFE8]">
+                  {[
+                    { val: 'happy', icon: Smile, color: 'text-green-600 hover:bg-green-50' },
+                    { val: 'peaceful', icon: Heart, color: 'text-purple-600 hover:bg-purple-50' },
+                    { val: 'neutral', icon: Meh, color: 'text-gray-500 hover:bg-gray-50' },
+                    { val: 'anxious', icon: Activity, color: 'text-yellow-600 hover:bg-yellow-50' },
+                    { val: 'sad', icon: Frown, color: 'text-blue-600 hover:bg-blue-50' }
+                  ].map(m => {
+                    const Icon = m.icon;
+                    const isSelected = selectedMood === m.val;
+                    return (
+                      <button
+                        key={m.val}
+                        type="button"
+                        onClick={() => setSelectedMood(m.val)}
+                        className={`p-2 rounded-xl transition-all cursor-pointer ${
+                          isSelected ? 'bg-[#DAEDDF] scale-110 shadow-sm border border-[#516750]/20' : 'opacity-70'
+                        } ${m.color}`}
+                        title={m.val}
+                      >
+                        <Icon className="w-6 h-6" />
+                      </button>
+                    );
+                  })}
                 </div>
-                <ArrowRight className="w-4 h-4 text-[#78716C] group-hover:text-[#516750] transition-colors" />
-              </Link>
 
-              {/* Mis sesiones */}
-              <Link 
-                href="/sesiones" 
-                className="flex items-center justify-between p-4 bg-[#F9F7F3] hover:bg-[#F2EFE8] border border-[#F2EFE8] rounded-2xl transition-all group"
-              >
-                <div className="flex items-center gap-3">
-                  <div className="p-2.5 bg-[#DAEDDF] text-[#1A3020] rounded-xl">
-                    <Clock className="w-5 h-5" />
+                {selectedMood && (
+                  <div className="space-y-2.5 animate-in fade-in slide-in-from-top-2 duration-200">
+                    <textarea
+                      value={moodText}
+                      onChange={(e) => setMoodText(e.target.value)}
+                      placeholder="Escribe una pequeña reflexión sobre cómo te sientes..."
+                      className="w-full p-3 bg-[#F9F7F3] border border-[#F2EFE8] rounded-xl text-xs focus:outline-none focus:border-[#516750] text-[#1C1917] resize-none"
+                      rows={2}
+                    />
+                    <div className="flex justify-between items-center">
+                      <span className="text-[10px] text-text-muted">Se guardará en tus bitácoras personales</span>
+                      <button
+                        type="submit"
+                        disabled={moodSaving}
+                        className="px-4 py-2 bg-[#516750] hover:bg-[#3f513e] text-white text-xs font-bold rounded-xl transition-all cursor-pointer"
+                      >
+                        {moodSaving ? 'Guardando...' : 'Guardar'}
+                      </button>
+                    </div>
                   </div>
-                  <div className="text-left">
-                    <h3 className="font-bold text-[#1C1917] text-xs">Mis Citas e Historial</h3>
-                    <p className="text-[10px] text-[#78716C]">Revisa comprobantes y estados de pago</p>
-                  </div>
-                </div>
-                <ArrowRight className="w-4 h-4 text-[#78716C] group-hover:text-[#516750] transition-colors" />
-              </Link>
-            </div>
+                )}
+              </form>
+            )}
+          </section>
 
-            <div className="p-4 bg-[#F9F7F3] border border-[#F2EFE8] rounded-2xl space-y-2">
-              <h4 className="text-xs font-bold text-[#1C1917] flex items-center gap-1.5">
-                <User className="w-4 h-4 text-[#516750]" />
-                <span>Contacto de Emergencia</span>
-              </h4>
-              {patient.emergency_contact_name ? (
-                <div className="text-xs space-y-1 text-[#78716C]">
-                  <p><strong className="font-semibold text-[#1C1917]">Nombre:</strong> {patient.emergency_contact_name} ({patient.emergency_contact_relationship || 'Contacto'})</p>
-                  <p><strong className="font-semibold text-[#1C1917]">Teléfono:</strong> {patient.emergency_contact_phone || 'N/A'}</p>
+          {/* 3. Recent Shared Resources (6/12) */}
+          <section className="col-span-12 md:col-span-6 bg-white rounded-3xl p-6 border border-[#F2EFE8] shadow-sm flex flex-col justify-between">
+            <div className="space-y-4">
+              <h2 className="text-sm font-bold text-[#1C1917] font-display flex items-center gap-2 border-b border-[#F2EFE8] pb-3 uppercase tracking-wider text-text-muted">
+                <FileText className="w-4 h-4 text-[#516750]" />
+                <span>Biblioteca y Recursos</span>
+              </h2>
+
+              {recentResources.length === 0 ? (
+                <div className="py-8 text-center text-text-muted text-xs bg-[#F9F7F3] rounded-2xl border border-[#F2EFE8]">
+                  No se han subido guías o recursos clínicos aún.
                 </div>
               ) : (
-                <div className="space-y-2 text-left">
-                  <p className="text-[11px] text-[#78716C]">No has registrado un contacto de emergencia aún.</p>
-                  <Link href="/perfil" className="text-xs font-bold text-[#516750] hover:text-[#3f513e] transition-colors flex items-center gap-1">
-                    <span>Configurar ahora</span>
-                    <ArrowRight className="w-3.5 h-3.5" />
-                  </Link>
+                <div className="space-y-2.5">
+                  {recentResources.map(file => (
+                    <div key={file.id} className="p-3 bg-[#F9F7F3] rounded-xl border border-[#F2EFE8] flex items-center justify-between gap-3 text-xs">
+                      <div className="min-w-0 flex-1">
+                        <p className="font-semibold text-[#1C1917] truncate">{file.original_name}</p>
+                        <p className="text-[9px] text-[#78716C] capitalize">{file.category} • {file.mime_type.split('/')[1] || 'Archivo'}</p>
+                      </div>
+                      <button
+                        onClick={async () => {
+                          const { data } = await supabase.storage
+                            .from('clinical-vault')
+                            .createSignedUrl(file.storage_path, 60);
+                          if (data?.signedUrl) {
+                            window.open(data.signedUrl, '_blank');
+                          } else {
+                            alert('No se pudo generar el enlace de descarga.');
+                          }
+                        }}
+                        className="p-2 hover:bg-[#DAEDDF] rounded-lg text-[#516750] transition-colors cursor-pointer"
+                        title="Descargar"
+                      >
+                        <Download className="w-4 h-4" />
+                      </button>
+                    </div>
+                  ))}
                 </div>
               )}
             </div>
+
+            <div className="text-right mt-4 pt-4 border-t border-[#F2EFE8]">
+              <Link href="/recursos" className="text-xs font-bold text-[#516750] hover:text-[#3f513e] transition-colors flex items-center justify-end gap-1">
+                <span>Ver todos los recursos</span>
+                <ArrowRight className="w-3.5 h-3.5" />
+              </Link>
+            </div>
           </section>
+
+          {/* 4. Support & Messaging Channel (6/12) */}
+          <section className="col-span-12 md:col-span-6 bg-white rounded-3xl p-6 border border-[#F2EFE8] shadow-sm flex flex-col justify-between">
+            <div className="space-y-4">
+              <h2 className="text-sm font-bold text-[#1C1917] font-display flex items-center gap-2 border-b border-[#F2EFE8] pb-3 uppercase tracking-wider text-text-muted">
+                <MessageSquare className="w-4 h-4 text-[#516750]" />
+                <span>Mensajes con mi Terapeuta</span>
+              </h2>
+
+              <div className="p-4 bg-[#F9F7F3] rounded-2xl border border-[#F2EFE8] flex items-center justify-between gap-4">
+                <div className="space-y-1">
+                  <h3 className="font-bold text-xs text-[#1C1917]">Canal de Comunicación Directo</h3>
+                  <p className="text-[10px] text-[#78716C] leading-relaxed">
+                    Escribe consultas clínicas a tu psicólogo o solicita soporte administrativo y técnico al centro.
+                  </p>
+                </div>
+                {unreadCount > 0 && (
+                  <span className="bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center font-bold text-[10px] shrink-0 animate-pulse">
+                    {unreadCount}
+                  </span>
+                )}
+              </div>
+            </div>
+
+            <div className="text-right mt-4 pt-4 border-t border-[#F2EFE8]">
+              <Link href="/mensajes" className="text-xs font-bold text-[#516750] hover:text-[#3f513e] transition-colors flex items-center justify-end gap-1">
+                <span>Ir a Mensajería</span>
+                <ArrowRight className="w-3.5 h-3.5" />
+              </Link>
+            </div>
+          </section>
+
+          {/* 5. Breathing and Self Care Tool (12/12) */}
+          <section className="col-span-12 bg-white rounded-3xl p-6 border border-[#F2EFE8] shadow-sm flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
+            <div className="space-y-3 max-w-xl">
+              <h2 className="text-sm font-bold text-[#1C1917] font-display flex items-center gap-2 uppercase tracking-wider text-text-muted">
+                <Sparkles className="w-4 h-4 text-[#516750]" />
+                <span>Tu Espacio de Autocuidado</span>
+              </h2>
+              <h3 className="text-base font-bold text-[#1C1917]">Ejercicios de respiración interactivos y tests rápidos</h3>
+              <p className="text-xs text-[#78716C] leading-relaxed">
+                Tómate un minuto para regular tu ritmo cardíaco y calmar la mente con nuestro regulador visual de respiración (animado bajo técnicas clínicas), o realiza una evaluación rápida de tu nivel de bienestar emocional general.
+              </p>
+            </div>
+
+            <Link
+              href="/autocuidado"
+              className="w-full md:w-auto px-5 py-3 bg-[#1A3020] hover:bg-[#2c4f35] text-white font-bold text-xs rounded-xl flex items-center justify-center gap-1.5 transition-all shadow-sm shrink-0"
+            >
+              <span>Ingresar a Autocuidado</span>
+              <ChevronRight className="w-4 h-4" />
+            </Link>
+          </section>
+
         </div>
       </div>
     </>
