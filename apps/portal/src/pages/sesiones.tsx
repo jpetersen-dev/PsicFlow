@@ -454,11 +454,11 @@ export default function PatientSessionsList() {
                     {!isCancelled && isPending && (
                       <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-4 text-left max-w-sm space-y-3">
                         <p className="text-[11px] text-yellow-800 leading-relaxed font-medium">
-                          Para confirmar la cita, completa el pago en nuestra pasarela segura:
+                          Para confirmar la cita, completa el pago seguro con PayPal:
                         </p>
                         <div className="flex items-center justify-between gap-4">
                           <a
-                            href={getLandingUrl(`/api/checkout-redirect?reference=${sess.transaction_id}`)}
+                            href={getLandingUrl(`/agendar?reference=${sess.transaction_id}`)}
                             target="_blank"
                             rel="noopener noreferrer"
                             className="w-full text-center px-4 py-2 bg-[#1A3020] hover:bg-[#2c4f35] text-white font-bold text-xs rounded-xl transition-all shadow-sm flex items-center justify-center gap-1.5 cursor-pointer text-white decoration-none font-sans"

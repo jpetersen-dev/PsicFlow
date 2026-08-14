@@ -234,11 +234,11 @@ export default function PatientPortalBooking() {
             <span>Pago Requerido para Confirmación</span>
           </h3>
           <p className="text-xs text-yellow-800 leading-relaxed">
-            Para confirmar tu cita de manera definitiva y agendar el bloque en el calendario del especialista, completa el pago seguro en la pasarela de Lemon Squeezy:
+            Para confirmar tu cita de manera definitiva y agendar el bloque en el calendario del especialista, completa el pago seguro con PayPal:
           </p>
           <div className="flex flex-col sm:flex-row items-center gap-4">
             <a
-              href={getLandingUrl(`/api/checkout-redirect?reference=${reservationResult.transaction_id}`)}
+              href={getLandingUrl(`/agendar?reference=${reservationResult.transaction_id}`)}
               target="_blank"
               rel="noopener noreferrer"
               className="w-full text-center py-3 bg-[#1A3020] hover:bg-[#2c4f35] text-white font-bold text-xs rounded-xl transition-all shadow-sm flex items-center justify-center gap-1.5 cursor-pointer text-white decoration-none font-sans font-semibold"
