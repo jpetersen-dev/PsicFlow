@@ -74,7 +74,7 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
       p_transaction_id: transactionId,
       p_value: 0.00, // Fallback if no service_id provided
       p_service_id: service_id || null,
-      p_currency: currency || undefined
+      p_currency: currency || 'CLP'
     });
 
     if (reserveErr || !reservationList || reservationList.length === 0) {
