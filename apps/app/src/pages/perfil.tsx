@@ -2730,6 +2730,7 @@ export default function Perfil() {
                                 <option value="CHF">CHF</option>
                                 <option value="EUR">EUR</option>
                                 <option value="USD">USD</option>
+                                <option value="AUD">AUD</option>
                               </select>
                             </div>
                           </div>
@@ -2793,6 +2794,7 @@ export default function Perfil() {
                                           <option value="CHF">CHF</option>
                                           <option value="EUR">EUR</option>
                                           <option value="USD">USD</option>
+                                          <option value="AUD">AUD</option>
                                         </select>
                                       </div>
 
