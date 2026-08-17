@@ -3,6 +3,7 @@ import { createClient } from '@supabase/supabase-js';
 import { validateApiKey } from '../../../../utils/authIntegration';
 import { allowCors } from '../../../../utils/cors';
 import { WebhookService } from '@/lib/webhookService';
+import { sendEmail } from '../../../../utils/emails';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
@@ -95,6 +96,52 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
     }
 
     const reservation = reservationList[0];
+
+    // Check if the service is free orientation (slug: 'entrevista-orientacion-psicologica-online')
+    let isFreeOrientation = false;
+    if (service_id) {
+      const { data: srvData } = await supabase
+        .from('services')
+        .select('id_slug, price')
+        .eq('id', service_id)
+        .maybeSingle();
+      if (srvData && srvData.id_slug === 'entrevista-orientacion-psicologica-online' && Number(srvData.price) === 0) {
+        isFreeOrientation = true;
+      }
+    }
+
+    if (isFreeOrientation) {
+      console.log(`[Reserve API] Sending verification email for free orientation interview session ${reservation.session_id} / ref: ${reservation.transaction_id}`);
+      
+      // Mark session as pending assignment
+      await supabase
+        .from('sessions')
+        .update({ comentarios_internos: '[PENDIENTE_ASIGNACION]' })
+        .eq('id', reservation.session_id);
+
+      const confirmationLink = `https://sentidomigrante.com/confirmar-cita?ref=${reservation.transaction_id}`;
+      sendEmail({
+        to: [{ name: fullName, email: email.trim().toLowerCase() }],
+        subject: 'Confirma tu Entrevista de Orientación Gratuita | Sentido Migrante',
+        htmlContent: `
+          <div style="font-family: sans-serif; color: #333; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #f0eade; border-radius: 12px;">
+            <h2 style="color: #1a3020; border-bottom: 2px solid #516750; padding-bottom: 10px;">Confirma tu Entrevista de Orientación</h2>
+            <p>Hola <strong>${fullName}</strong>,</p>
+            <p>Has solicitado agendar una entrevista de orientación gratuita de 20 minutos en Sentido Migrante.</p>
+            <p>Para asegurar tu bloque de horario en el sistema, necesitamos verificar tu correo electrónico. Por favor, haz clic en el siguiente botón para confirmar tu correo:</p>
+            <div style="text-align: center; margin: 30px 0;">
+              <a href="${confirmationLink}" style="background-color: #1a3020; color: white; padding: 12px 24px; text-decoration: none; font-weight: bold; border-radius: 8px; display: inline-block;">Verificar Correo Electrónico</a>
+            </div>
+            <p><strong>Nota importante:</strong> Una vez que verifiques tu correo, tu cita quedará registrada en el sistema y nuestro equipo te asignará un terapeuta disponible. Recibirás un segundo correo con los datos de tu profesional asignado y el enlace correspondiente para la videollamada.</p>
+            <p style="font-size: 12px; color: #666;">Si el botón no funciona, copia y pega este enlace en tu navegador:<br><a href="${confirmationLink}">${confirmationLink}</a></p>
+            <hr style="border: 0; border-top: 1px solid #eee; margin: 20px 0;">
+            <p style="font-size: 11px; color: #888; text-align: center;">Este es un correo automático. Por favor, no respondas a este mensaje.</p>
+          </div>
+        `
+      }).catch(err => {
+        console.error('[Reserve API] Error sending verification email:', err);
+      });
+    }
 
     // Trigger webhook asynchronously (non-blocking) for appointment.booked
     WebhookService.trigger('appointment.booked', organizationId, {

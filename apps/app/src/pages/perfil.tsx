@@ -49,6 +49,8 @@ export default function Perfil() {
   const [bookingCurrency, setBookingCurrency] = useState('CLP');
   const [termsText, setTermsText] = useState('');
   const [sandboxMode, setSandboxMode] = useState(false);
+  const [minAnticipationHours, setMinAnticipationHours] = useState(24);
+  const [bufferBetweenSessionsMinutes, setBufferBetweenSessionsMinutes] = useState(10);
   
   // PayPal Credentials
   const [paypalActive, setPaypalActive] = useState(false);
@@ -1090,6 +1092,8 @@ export default function Perfil() {
         setBookingCurrency(bookData.currency || 'CLP');
         setTermsText(bookData.terms_text || '');
         setSandboxMode(bookData.sandbox_mode || false);
+        setMinAnticipationHours(bookData.min_anticipation_hours !== undefined && bookData.min_anticipation_hours !== null ? bookData.min_anticipation_hours : 24);
+        setBufferBetweenSessionsMinutes(bookData.buffer_between_sessions_minutes !== undefined && bookData.buffer_between_sessions_minutes !== null ? bookData.buffer_between_sessions_minutes : 10);
       }
 
       // Get payment gateways
@@ -1369,7 +1373,9 @@ export default function Perfil() {
           booking_prefix: bookingPrefix,
           currency: bookingCurrency,
           terms_text: termsText,
-          sandbox_mode: sandboxMode
+          sandbox_mode: sandboxMode,
+          min_anticipation_hours: minAnticipationHours,
+          buffer_between_sessions_minutes: bufferBetweenSessionsMinutes
         }, { onConflict: 'organization_id' });
 
       if (bookErr) throw bookErr;
@@ -2471,6 +2477,44 @@ export default function Perfil() {
                             <ChevronRight className="w-4 h-4 transform rotate-90" />
                           </div>
                         </div>
+                      </div>
+                      <div className="space-y-2">
+                        <label className="flex items-center gap-1.5 font-label-md text-on-surface font-semibold text-xs">
+                          <span>Anticipación Mínima (Horas)</span>
+                          <div className="group relative cursor-pointer">
+                            <Info className="w-3.5 h-3.5 text-on-surface-variant/70 hover:text-primary" />
+                            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-64 p-2 bg-neutral-950 text-white text-[11px] rounded shadow-lg opacity-0 pointer-events-none group-hover:opacity-100 transition-opacity z-50 leading-relaxed normal-case font-normal">
+                              Tiempo mínimo de anticipación requerido para que un paciente pueda agendar una cita.
+                            </div>
+                          </div>
+                        </label>
+                        <input 
+                          type="number" 
+                          required
+                          min="0"
+                          value={minAnticipationHours}
+                          onChange={(e) => setMinAnticipationHours(Math.max(0, parseInt(e.target.value) || 0))}
+                          className="w-full bg-surface-container-low border border-outline-variant/30 rounded-lg px-3 py-2 text-sm text-on-surface focus:ring-2 focus:ring-primary/20 focus:border-primary focus:outline-none transition-all" 
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <label className="flex items-center gap-1.5 font-label-md text-on-surface font-semibold text-xs">
+                          <span>Bloque de Holgura (Minutos)</span>
+                          <div className="group relative cursor-pointer">
+                            <Info className="w-3.5 h-3.5 text-on-surface-variant/70 hover:text-primary" />
+                            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-64 p-2 bg-neutral-950 text-white text-[11px] rounded shadow-lg opacity-0 pointer-events-none group-hover:opacity-100 transition-opacity z-50 leading-relaxed normal-case font-normal">
+                              Tiempo de descanso o preparación requerido entre sesiones consecutivas.
+                            </div>
+                          </div>
+                        </label>
+                        <input 
+                          type="number" 
+                          required
+                          min="0"
+                          value={bufferBetweenSessionsMinutes}
+                          onChange={(e) => setBufferBetweenSessionsMinutes(Math.max(0, parseInt(e.target.value) || 0))}
+                          className="w-full bg-surface-container-low border border-outline-variant/30 rounded-lg px-3 py-2 text-sm text-on-surface focus:ring-2 focus:ring-primary/20 focus:border-primary focus:outline-none transition-all" 
+                        />
                       </div>
                     </div>
 

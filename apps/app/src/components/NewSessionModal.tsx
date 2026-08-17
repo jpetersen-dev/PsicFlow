@@ -14,10 +14,12 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({ isOpen, onClos
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [patients, setPatients] = useState<{ id: string; full_name: string }[]>([]);
+  const [services, setServices] = useState<{ id: string; title: string; price: number; currency: string }[]>([]);
   const [activeProfile, setActiveProfile] = useState<any>(null);
 
   const [formData, setFormData] = useState({
     patient_id: '',
+    service_id: '',
     date_session: '',
     time_session: '',
     modality: 'Online',
@@ -36,6 +38,7 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({ isOpen, onClos
 
       setFormData({
         patient_id: '',
+        service_id: '',
         date_session: defaultDate || `${yy}-${mm}-${dd}`,
         time_session: defaultTime || timeStr,
         modality: 'Online',
@@ -90,9 +93,31 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({ isOpen, onClos
       if (loadedPatients.length > 0) {
         setFormData(prev => ({ ...prev, patient_id: loadedPatients[0].id }));
       }
+
+      // Fetch active services
+      const { data: servicesData, error: servicesErr } = await supabase
+        .from('services')
+        .select('id, title, price, currency')
+        .eq('organization_id', activeTenant)
+        .eq('is_active', true)
+        .order('title', { ascending: true });
+
+      if (!servicesErr && servicesData) {
+        setServices(servicesData);
+      }
     } catch (err: any) {
       setError(err.message || 'Error al inicializar el formulario.');
     }
+  };
+
+  const handleServiceChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const sId = e.target.value;
+    const selectedSrv = services.find(s => s.id === sId);
+    setFormData(prev => ({
+      ...prev,
+      service_id: sId,
+      value_session: selectedSrv ? Number(selectedSrv.price) : prev.value_session
+    }));
   };
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
@@ -122,6 +147,7 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({ isOpen, onClos
           organization_id: activeTenant,
           patient_id: formData.patient_id,
           professional_id: activeProfile.id,
+          service_id: formData.service_id ? formData.service_id : null,
           date_session: formData.date_session,
           time_session: `${formData.time_session}:00`, // Format HH:MM:SS
           modality: formData.modality,
@@ -210,6 +236,24 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({ isOpen, onClos
                   </option>
                 ))
               )}
+            </select>
+          </div>
+
+          {/* Servicio Selector */}
+          <div>
+            <label className="block text-xs text-text-secondary mb-1 font-medium">Servicio Asociado</label>
+            <select
+              name="service_id"
+              value={formData.service_id}
+              onChange={handleServiceChange}
+              className="w-full bg-bg-input border border-border-color rounded-lg px-3 py-2 text-sm text-text-primary focus:border-border-focus focus:outline-none"
+            >
+              <option value="" className="bg-bg-sidebar text-text-primary">Ninguno (Sesión Normal)</option>
+              {services.map(s => (
+                <option key={s.id} value={s.id} className="bg-bg-sidebar text-text-primary">
+                  {s.title} ({s.price} {s.currency})
+                </option>
+              ))}
             </select>
           </div>
 

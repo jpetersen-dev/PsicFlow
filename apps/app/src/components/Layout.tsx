@@ -47,6 +47,137 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
   const [profile, setProfile] = useState<{ full_name: string; role_name: string } | null>(null);
   const [authChecking, setAuthChecking] = useState(!isNoLayout);
   const [isPatient, setIsPatient] = useState(false);
+ 
+  const [notifications, setNotifications] = useState<any[]>([]);
+  const [showNotifications, setShowNotifications] = useState(false);
+  const notificationsRef = useRef<HTMLDivElement>(null);
+  
+  const [assigningSessionId, setAssigningSessionId] = useState<string | null>(null);
+  const [selectedProId, setSelectedProId] = useState<string>('');
+  const [isAssigning, setIsAssigning] = useState(false);
+  const [teamMembers, setTeamMembers] = useState<any[]>([]);
+ 
+  const fetchTeamMembers = async () => {
+    try {
+      const activeTenantId = localStorage.getItem('active-tenant-id');
+      if (!activeTenantId) return;
+ 
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('id, full_name')
+        .eq('organization_id', activeTenantId);
+ 
+      if (!error && data) {
+        setTeamMembers(data);
+      }
+    } catch (err) {
+      console.error('Error fetching team members:', err);
+    }
+  };
+ 
+  const handleAssignTherapist = async (sessionId: string, proId: string) => {
+    if (!proId) return;
+    setIsAssigning(true);
+    try {
+      const activeTenantId = localStorage.getItem('active-tenant-id');
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+ 
+      if (!token || !activeTenantId) {
+        alert('Sesión inválida o faltan credenciales');
+        return;
+      }
+ 
+      const res = await fetch('/api/v1/booking/assign-therapist', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+          'x-tenant-id': activeTenantId,
+        },
+        body: JSON.stringify({ sessionId, professionalId: proId }),
+      });
+ 
+      const data = await res.json();
+      if (res.ok && data.success) {
+        alert(`Terapeuta asignado correctamente: ${data.professionalName}`);
+        setAssigningSessionId(null);
+        setSelectedProId('');
+        fetchNotifications();
+      } else {
+        alert(`Error al asignar terapeuta: ${data.error}`);
+      }
+    } catch (err) {
+      console.error('Error assigning therapist:', err);
+      alert('Error de red al asignar terapeuta.');
+    } finally {
+      setIsAssigning(false);
+    }
+  };
+ 
+  const fetchNotifications = async () => {
+    try {
+      const activeTenantId = localStorage.getItem('active-tenant-id');
+      if (!activeTenantId) return;
+ 
+      const twoDaysAgo = new Date();
+      twoDaysAgo.setDate(twoDaysAgo.getDate() - 2);
+      const twoDaysAgoStr = twoDaysAgo.toISOString().split('T')[0];
+ 
+      const { data, error } = await supabase
+        .from('sessions')
+        .select(`
+          id,
+          date_session,
+          time_session,
+          status_payment,
+          transaction_id,
+          comentarios_internos,
+          professional_id,
+          patient:patient_id (full_name),
+          service:service_id (id_slug, title)
+        `)
+        .eq('organization_id', activeTenantId)
+        .or(`status_payment.eq.Pendiente,and(status_payment.eq.Pagado,date_session.gte.${twoDaysAgoStr})`)
+        .order('date_session', { ascending: false })
+        .order('time_session', { ascending: false });
+ 
+      if (error) {
+        console.error('Error fetching orientation notifications:', error);
+      } else if (data) {
+        const orientationNotifs = data.filter((s: any) => 
+          s.service?.id_slug === 'entrevista-orientacion-psicologica-online'
+        );
+        setNotifications(orientationNotifs);
+      }
+    } catch (err) {
+      console.error('Error in fetchNotifications:', err);
+    }
+  };
+ 
+  useEffect(() => {
+    if (isNoLayout || isPatient) return;
+    fetchNotifications();
+ 
+    const interval = setInterval(fetchNotifications, 60000);
+    return () => clearInterval(interval);
+  }, [isNoLayout, isPatient, activeTenant]);
+ 
+  useEffect(() => {
+    function handleClickOutsideNotif(event: MouseEvent) {
+      if (
+        showNotifications &&
+        notificationsRef.current &&
+        !notificationsRef.current.contains(event.target as Node)
+      ) {
+        setShowNotifications(false);
+      }
+    }
+    document.addEventListener('pointerdown', handleClickOutsideNotif);
+    return () => {
+      document.removeEventListener('pointerdown', handleClickOutsideNotif);
+    };
+  }, [showNotifications]);
   
   const sidebarRef = useRef<HTMLElement>(null);
   const menuButtonRef = useRef<HTMLButtonElement>(null);
@@ -449,13 +580,124 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
             )}
 
             {/* Notifications Bell */}
-            <button
-              className="p-1.5 bg-bg-input border border-border-color hover:bg-bg-card hover:text-accent-primary text-text-secondary rounded-lg transition-all flex items-center justify-center cursor-pointer relative"
-              title="Notificaciones"
-            >
-              <Bell className="w-4 h-4" />
-              <span className="absolute top-1 right-1 w-2 h-2 bg-accent-primary rounded-full"></span>
-            </button>
+            <div className="relative" ref={notificationsRef}>
+              <button
+                onClick={() => {
+                  setShowNotifications(!showNotifications);
+                  if (!showNotifications) {
+                    fetchNotifications();
+                    fetchTeamMembers();
+                  }
+                }}
+                className="p-1.5 bg-bg-input border border-border-color hover:bg-bg-card hover:text-accent-primary text-text-secondary rounded-lg transition-all flex items-center justify-center cursor-pointer relative"
+                title="Notificaciones"
+              >
+                <Bell className="w-4 h-4" />
+                {notifications.some(n => n.status_payment === 'Pendiente') && (
+                  <span className="absolute top-1 right-1 w-2 h-2 bg-accent-primary rounded-full animate-pulse"></span>
+                )}
+              </button>
+
+              {showNotifications && (
+                <div className="absolute right-0 mt-2 w-80 bg-bg-card border border-border-color rounded-xl shadow-xl z-50 overflow-hidden text-sm">
+                  <div className="px-4 py-3 border-b border-border-color bg-bg-sidebar font-bold text-text-primary flex justify-between items-center">
+                    <span>Notificaciones</span>
+                    <span className="text-[10px] bg-accent-primary/20 text-accent-primary px-2 py-0.5 rounded-full">
+                      Orientación
+                    </span>
+                  </div>
+                  <div className="max-h-72 overflow-y-auto divide-y divide-border-color">
+                    {notifications.length === 0 ? (
+                      <div className="px-4 py-6 text-center text-text-muted text-xs">
+                        No hay notificaciones pendientes.
+                      </div>
+                    ) : (
+                      notifications.map(notif => {
+                        const pat = notif.patient as any;
+                        const isPending = notif.status_payment === 'Pendiente';
+                        const isUnassigned = notif.comentarios_internos?.includes('[PENDIENTE_ASIGNACION]');
+                        return (
+                          <div key={notif.id} className="p-3 hover:bg-bg-input transition-colors">
+                            <div className="flex justify-between items-start gap-2 mb-1">
+                              <div className="flex gap-1.5 flex-wrap">
+                                <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
+                                  isPending ? 'bg-warning/15 text-warning' : 'bg-success/15 text-success'
+                                }`}>
+                                  {isPending ? 'Pendiente Confirmación' : 'Confirmado'}
+                                </span>
+                                {isUnassigned && (
+                                  <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-error/15 text-error">
+                                    Sin Asignar
+                                  </span>
+                                )}
+                              </div>
+                              <span className="text-[10px] text-text-muted font-mono">{notif.date_session}</span>
+                            </div>
+                            <p className="text-xs text-text-primary leading-relaxed">
+                              {isPending ? (
+                                <>
+                                  Nueva entrevista de orientación solicitada por <strong>{pat?.full_name}</strong> para las {notif.time_session?.slice(0, 5)} hrs.
+                                </>
+                              ) : (
+                                <>
+                                  Entrevista con <strong>{pat?.full_name}</strong> confirmada para las {notif.time_session?.slice(0, 5)} hrs.
+                                  {!isUnassigned && ' Agendada en calendario.'}
+                                </>
+                              )}
+                            </p>
+                            
+                            {isUnassigned && (
+                              <div className="mt-2 pt-2 border-t border-border-color/50">
+                                {assigningSessionId === notif.id ? (
+                                  <div className="flex items-center gap-1.5">
+                                    <select
+                                      value={selectedProId}
+                                      onChange={(e) => setSelectedProId(e.target.value)}
+                                      className="flex-1 bg-bg-card border border-border-color rounded px-2 py-1 text-xs text-text-primary focus:outline-none focus:border-accent-primary"
+                                    >
+                                      <option value="">Seleccionar...</option>
+                                      {teamMembers.map(m => (
+                                        <option key={m.id} value={m.id}>{m.full_name}</option>
+                                      ))}
+                                    </select>
+                                    <button
+                                      disabled={!selectedProId || isAssigning}
+                                      onClick={() => handleAssignTherapist(notif.id, selectedProId)}
+                                      className="bg-accent-primary hover:bg-accent-primary-hover disabled:opacity-50 text-white font-semibold text-[10px] px-2 py-1.5 rounded transition-all cursor-pointer"
+                                    >
+                                      {isAssigning ? '...' : 'Asignar'}
+                                    </button>
+                                    <button
+                                      onClick={() => {
+                                        setAssigningSessionId(null);
+                                        setSelectedProId('');
+                                      }}
+                                      className="bg-bg-input border border-border-color text-text-secondary hover:bg-bg-card text-[10px] px-2 py-1.5 rounded transition-all cursor-pointer"
+                                    >
+                                      X
+                                    </button>
+                                  </div>
+                                ) : (
+                                  <button
+                                    onClick={() => {
+                                      setAssigningSessionId(notif.id);
+                                      setSelectedProId(notif.professional_id || '');
+                                    }}
+                                    className="text-[10px] font-semibold text-accent-primary hover:text-accent-primary-hover flex items-center gap-1 bg-accent-primary/10 hover:bg-accent-primary/20 px-2.5 py-1 rounded-md transition-all cursor-pointer"
+                                  >
+                                    Asignar Terapeuta
+                                  </button>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
 
             {/* Profile/Config Settings Gear */}
             {!isPatient && (

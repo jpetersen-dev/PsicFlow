@@ -122,7 +122,8 @@ export default function Calendario() {
           comentarios_internos,
           google_event_id,
           patient:patient_id (full_name, email, phone),
-          professional:professional_id (full_name)
+          professional:professional_id (full_name),
+          service:service_id (title)
         `);
 
       if (error) {
@@ -1612,6 +1613,16 @@ export default function Calendario() {
                           </p>
                         </div>
                       </div>
+
+                      {/* Service associated */}
+                      {sess.service?.title && (
+                        <div className="bg-surface-container-low p-3.5 rounded-2xl border border-outline-variant/10 space-y-1">
+                          <p className="text-[10px] text-on-surface-variant font-bold uppercase tracking-wider">Servicio de la Sesión</p>
+                          <p className="text-sm font-extrabold text-on-surface">
+                            {sess.service.title}
+                          </p>
+                        </div>
+                      )}
 
                       {/* Session Metadata Grid */}
                       <div className="grid grid-cols-2 gap-4">

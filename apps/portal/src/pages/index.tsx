@@ -36,6 +36,13 @@ export default function PatientPortalHome() {
   const [moodSaving, setMoodSaving] = useState(false);
   const [moodSaved, setMoodSaved] = useState(false);
 
+  const getLandingUrl = (path: string = '') => {
+    const isLocal = typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
+    const landingUrl = process.env.NEXT_PUBLIC_LANDING_URL || (isLocal ? 'http://localhost:3000' : 'https://sentidomigrante.com');
+    const cleanPath = path.startsWith('/') ? path : `/${path}`;
+    return `${landingUrl}${cleanPath}`;
+  };
+
   const fetchPortalData = async () => {
     try {
       const { data: { session } } = await supabase.auth.getSession();
@@ -59,7 +66,7 @@ export default function PatientPortalHome() {
       // Fetch patient sessions (upcoming ones first)
       const { data: sessData, error: sessErr } = await supabase
         .from('sessions')
-        .select('*, professional:professional_id (full_name, specialization, timezone)')
+        .select('*, professional:professional_id (full_name, specialization, timezone), service:service_id (id_slug, title, duration_minutes)')
         .eq('patient_id', patData.id)
         .order('date_session', { ascending: true });
 
@@ -206,20 +213,24 @@ export default function PatientPortalHome() {
                           ? 'bg-[#DAEDDF] text-[#1A3020]' 
                           : 'bg-yellow-100 text-yellow-800'
                       }`}>
-                        {nextSession.status_payment === 'Pagado' ? 'Confirmada' : 'Pendiente de Pago'}
+                        {nextSession.status_payment === 'Pagado' 
+                          ? 'Confirmada' 
+                          : (nextSession.service?.id_slug === 'entrevista-orientacion-psicologica-online' || Number(nextSession.value_session) === 0)
+                            ? 'Pendiente de Confirmación' 
+                            : 'Pendiente de Pago'}
                       </span>
                       <span className="bg-[#DAEDDF] text-[#1A3020] px-2.5 py-0.5 rounded text-[10px] font-bold">
                         Online (Videollamada)
                       </span>
                     </div>
-
+ 
                     <h3 className="font-bold text-[#1C1917] text-base">
                       Terapeuta: {nextSession.professional?.full_name || 'Psicólogo'}
                     </h3>
                     <p className="text-xs text-[#78716C]">
                       {nextSession.professional?.specialization || 'Psicoterapeuta'}
                     </p>
-
+ 
                     <div className="flex flex-wrap gap-4 text-xs font-semibold text-[#78716C] mt-2">
                       <span className="flex items-center gap-1.5">
                         <Calendar className="w-4 h-4 text-[#516750]" />
@@ -231,7 +242,7 @@ export default function PatientPortalHome() {
                       </span>
                     </div>
                   </div>
-
+ 
                   <div className="w-full md:w-auto">
                     {nextSession.status_payment === 'Pagado' ? (
                       <a
@@ -246,15 +257,28 @@ export default function PatientPortalHome() {
                         <span>Entrar a Videollamada</span>
                       </a>
                     ) : (
-                      <div className="text-center space-y-2">
-                        <p className="text-[11px] text-[#78716C] font-medium">Por favor completa el pago de tu cita para confirmar.</p>
-                        <Link
-                          href="/sesiones"
-                          className="w-full md:w-auto px-5 py-3 bg-[#1A3020] hover:bg-[#2c4f35] text-white font-bold text-xs rounded-xl flex items-center justify-center gap-2 transition-all shadow-sm"
-                        >
-                          Pagar Sesión
-                        </Link>
-                      </div>
+                      (nextSession.service?.id_slug === 'entrevista-orientacion-psicologica-online' || Number(nextSession.value_session) === 0) ? (
+                        <div className="text-center space-y-2">
+                          <p className="text-[11px] text-[#78716C] font-medium">Confirma tu correo para asegurar tu bloque horario.</p>
+                          <a
+                            href={getLandingUrl(`/confirmar-cita?ref=${nextSession.transaction_id}`)}
+                            className="w-full md:w-auto px-5 py-3 bg-[#1A3020] hover:bg-[#2c4f35] text-white font-bold text-xs rounded-xl flex items-center justify-center gap-2 transition-all shadow-sm cursor-pointer"
+                          >
+                            <CheckCircle2 className="w-4 h-4" />
+                            <span>Confirmar Cita</span>
+                          </a>
+                        </div>
+                      ) : (
+                        <div className="text-center space-y-2">
+                          <p className="text-[11px] text-[#78716C] font-medium">Por favor completa el pago de tu cita para confirmar.</p>
+                          <Link
+                            href="/sesiones"
+                            className="w-full md:w-auto px-5 py-3 bg-[#1A3020] hover:bg-[#2c4f35] text-white font-bold text-xs rounded-xl flex items-center justify-center gap-2 transition-all shadow-sm"
+                          >
+                            Pagar Sesión
+                          </Link>
+                        </div>
+                      )
                     )}
                   </div>
                 </div>

@@ -112,7 +112,7 @@ export default function PatientSessionsList() {
         // Get sessions
         const { data: sessData } = await supabase
           .from('sessions')
-          .select('*, professional:professional_id (id, full_name, specialization, timezone)')
+          .select('*, professional:professional_id (id, full_name, specialization, timezone), service:service_id (id_slug, title, duration_minutes)')
           .eq('patient_id', patData.id)
           .order('date_session', { ascending: false });
 
@@ -373,10 +373,17 @@ export default function PatientSessionsList() {
                               <span>Pagado</span>
                             </>
                           ) : (
-                            <>
-                              <AlertCircle className="w-3 h-3 text-yellow-500 animate-pulse" />
-                              <span>Pago Pendiente</span>
-                            </>
+                            (sess.service?.id_slug === 'entrevista-orientacion-psicologica-online' || Number(sess.value_session) === 0) ? (
+                              <>
+                                <AlertCircle className="w-3 h-3 text-yellow-500 animate-pulse" />
+                                <span>Confirmación Pendiente</span>
+                              </>
+                            ) : (
+                              <>
+                                <AlertCircle className="w-3 h-3 text-yellow-500 animate-pulse" />
+                                <span>Pago Pendiente</span>
+                              </>
+                            )
                           )}
                         </span>
                       )}
@@ -452,28 +459,45 @@ export default function PatientSessionsList() {
 
                     {/* Pagar pendiente */}
                     {!isCancelled && isPending && (
-                      <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-4 text-left max-w-sm space-y-3">
-                        <p className="text-[11px] text-yellow-800 leading-relaxed font-medium">
-                          Para confirmar la cita, completa el pago seguro con PayPal:
-                        </p>
-                        <div className="flex items-center justify-between gap-4">
-                          <a
-                            href={getLandingUrl(`/agendar?reference=${sess.transaction_id}`)}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="w-full text-center px-4 py-2 bg-[#1A3020] hover:bg-[#2c4f35] text-white font-bold text-xs rounded-xl transition-all shadow-sm flex items-center justify-center gap-1.5 cursor-pointer text-white decoration-none font-sans"
-                          >
-                            <CreditCard className="w-4 h-4 text-white" />
-                            <span>Proceder al Pago</span>
-                          </a>
+                      (sess.service?.id_slug === 'entrevista-orientacion-psicologica-online' || Number(sess.value_session) === 0) ? (
+                        <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-4 text-left max-w-sm space-y-3">
+                          <p className="text-[11px] text-yellow-800 leading-relaxed font-medium">
+                            Para asegurar tu bloque horario, por favor verifica tu correo electrónico:
+                          </p>
+                          <div className="flex items-center justify-between gap-4">
+                            <a
+                              href={getLandingUrl(`/confirmar-cita?ref=${sess.transaction_id}`)}
+                              className="w-full text-center px-4 py-2 bg-[#1A3020] hover:bg-[#2c4f35] text-white font-bold text-xs rounded-xl transition-all shadow-sm flex items-center justify-center gap-1.5 cursor-pointer text-white decoration-none font-sans"
+                            >
+                              <CheckCircle2 className="w-4 h-4 text-white" />
+                              <span>Confirmar Cita</span>
+                            </a>
+                          </div>
                         </div>
-                      </div>
+                      ) : (
+                        <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-4 text-left max-w-sm space-y-3">
+                          <p className="text-[11px] text-yellow-800 leading-relaxed font-medium">
+                            Para confirmar la cita, completa el pago seguro con PayPal:
+                          </p>
+                          <div className="flex items-center justify-between gap-4">
+                            <a
+                              href={getLandingUrl(`/agendar?reference=${sess.transaction_id}`)}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="w-full text-center px-4 py-2 bg-[#1A3020] hover:bg-[#2c4f35] text-white font-bold text-xs rounded-xl transition-all shadow-sm flex items-center justify-center gap-1.5 cursor-pointer text-white decoration-none font-sans"
+                            >
+                              <CreditCard className="w-4 h-4 text-white" />
+                              <span>Proceder al Pago</span>
+                            </a>
+                          </div>
+                        </div>
+                      )
                     )}
 
                     {!isCancelled && sess.status_payment === 'Pagado' && !isFuture && (
                       <div className="flex items-center gap-1.5 text-xs text-green-700 font-semibold bg-green-50 px-3 py-1.5 border border-green-100 rounded-xl">
                         <CheckCircle2 className="w-4 h-4 text-green-600" />
-                        <span>Pago Confirmado</span>
+                        <span>{(sess.service?.id_slug === 'entrevista-orientacion-psicologica-online' || Number(sess.value_session) === 0) ? 'Confirmada' : 'Pago Confirmado'}</span>
                       </div>
                     )}
                   </div>

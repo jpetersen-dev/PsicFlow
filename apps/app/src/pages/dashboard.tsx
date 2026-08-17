@@ -109,7 +109,8 @@ export default function Dashboard() {
           status_session, 
           value_session,
           status_payment,
-          patient:patient_id (id, full_name)
+          patient:patient_id (id, full_name),
+          service:service_id (title)
         `)
         .gte('date_session', todayStr)
         .order('date_session', { ascending: true })
@@ -431,7 +432,14 @@ export default function Dashboard() {
                                 <div className="w-8 h-8 rounded-full bg-primary/10 text-primary flex items-center justify-center font-bold text-[12px] mr-3">
                                   {pInitials}
                                 </div>
-                                <span className="font-medium text-on-surface">{maskName(pName)}</span>
+                                <div className="flex flex-col">
+                                  <span className="font-medium text-on-surface">{maskName(pName)}</span>
+                                  {sess.service?.title && (
+                                    <span className="text-[10px] text-text-secondary font-semibold mt-0.5">
+                                      {sess.service.title}
+                                    </span>
+                                  )}
+                                </div>
                               </div>
                             </td>
                             <td className="px-6 py-4 text-on-surface-variant font-mono">
