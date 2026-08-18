@@ -78,6 +78,7 @@ export default function PatientPortalHome() {
       const { data: filesData } = await supabase
         .from('files_vault')
         .select('*')
+        .eq('is_shared', true)
         .or(`patient_id.eq.${patData.id},patient_id.is.null`)
         .order('created_at', { ascending: false })
         .limit(2);

@@ -19,10 +19,14 @@ import {
   DollarSign,
   AlertTriangle,
   FolderOpen,
-  X
+  X,
+  Eye,
+  EyeOff,
+  Lock
 } from 'lucide-react';
 import { supabase } from '../../lib/supabaseClient';
 import { usePrivacyMode } from '../../components/PrivacyModeProvider';
+import { hasFeature } from '../../utils/planFeatures';
 
 const COMMON_DIAGNOSTICS = [
   { code: 'F32.9', description: 'Trastorno depresivo no especificado' },
@@ -46,6 +50,8 @@ export default function PacienteFicha() {
   
   const [activeTab, setActiveTab] = useState<TabType>('resumen');
   const [patient, setPatient] = useState<any>(null);
+  const [organization, setOrganization] = useState<any>(null);
+  const [currentPlan, setCurrentPlan] = useState<string>('Starter');
   const [clinicalRecord, setClinicalRecord] = useState<any>(null);
   const [diagnostics, setDiagnostics] = useState<any[]>([]);
   const [sessions, setSessions] = useState<any[]>([]);
@@ -57,6 +63,8 @@ export default function PacienteFicha() {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
+
+  const canShareWithPatient = hasFeature(currentPlan, 'portal');
 
   // Extended patient portal clinical states
   const [journals, setJournals] = useState<any[]>([]);
@@ -169,6 +177,7 @@ export default function PacienteFicha() {
   const [fileDescription, setFileDescription] = useState('');
   const [fileCategory, setFileCategory] = useState('General');
   const [uploadingFileObject, setUploadingFileObject] = useState<File | null>(null);
+  const [shareWithPatient, setShareWithPatient] = useState(false);
 
   // Delete Patient state
   const [isDeletePatientOpen, setIsDeletePatientOpen] = useState(false);
@@ -177,6 +186,29 @@ export default function PacienteFicha() {
   // Delete Session state
   const [deleteSessionId, setDeleteSessionId] = useState<string | null>(null);
   const [isDeleteSessionOpen, setIsDeleteSessionOpen] = useState(false);
+
+  const handleToggleFileShare = async (file: any) => {
+    if (!canShareWithPatient) {
+      router.push('/plan');
+      return;
+    }
+    try {
+      const nextShared = !file.is_shared;
+      const { error: updateErr } = await supabase
+        .from('files_vault')
+        .update({ is_shared: nextShared })
+        .eq('id', file.id);
+
+      if (updateErr) throw updateErr;
+
+      setFiles((prev) =>
+        prev.map((f) => (f.id === file.id ? { ...f, is_shared: nextShared } : f))
+      );
+    } catch (err: any) {
+      console.error('Error toggling file share:', err);
+      alert('Error al actualizar visibilidad del archivo: ' + (err.message || 'Error desconocido'));
+    }
+  };
 
   const fetchFichaData = async () => {
     if (!id) return;
@@ -194,6 +226,20 @@ export default function PacienteFicha() {
       }
       setPatient(patData);
       setEditPatient(patData);
+
+      // Fetch organization plan for feature gating
+      const tenantId = localStorage.getItem('active-tenant-id') || patData.organization_id || '';
+      if (tenantId) {
+        const { data: orgData } = await supabase
+          .from('organizations')
+          .select('id, name, current_plan')
+          .eq('id', tenantId)
+          .maybeSingle();
+        if (orgData) {
+          setOrganization(orgData);
+          setCurrentPlan(orgData.current_plan || 'Starter');
+        }
+      }
 
       // 2. Fetch Clinical Record (Conceptualization)
       const { data: recData } = await supabase
@@ -1648,6 +1694,7 @@ export default function PacienteFicha() {
                       setUploadingFileObject(file);
                       setFileDescription('');
                       setFileCategory('General');
+                      setShareWithPatient(false);
                       setIsAddFileModalOpen(true);
                       e.target.value = '';
                     }}
@@ -1662,11 +1709,52 @@ export default function PacienteFicha() {
                   {files.map((file) => (
                     <div key={file.id} className="bg-bg-input/40 border border-border-color p-4 rounded-xl flex items-start justify-between gap-3 text-xs">
                       <div className="space-y-1 flex-1 min-w-0">
-                        <p className="font-semibold text-text-primary truncate">{file.original_name}</p>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <p className="font-semibold text-text-primary truncate">{file.original_name}</p>
+                          {file.is_shared ? (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-accent-primary/10 text-accent-primary border border-accent-primary/20 shrink-0">
+                              <Eye className="w-3 h-3" />
+                              <span>Visible en Portal</span>
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-bg-card text-text-muted border border-border-color shrink-0">
+                              <EyeOff className="w-3 h-3" />
+                              <span>Privado</span>
+                            </span>
+                          )}
+                        </div>
                         <p className="text-[10px] text-text-muted">Categoría: {file.category} • Tipo: {file.mime_type}</p>
                         {file.description && <p className="text-text-secondary pt-1 font-medium">{file.description}</p>}
                       </div>
                       <div className="flex items-center gap-1.5 shrink-0">
+                        <button
+                          onClick={() => handleToggleFileShare(file)}
+                          className={`p-1.5 rounded-lg border transition-all cursor-pointer flex items-center gap-1 ${
+                            file.is_shared
+                              ? 'bg-accent-primary/10 border-accent-primary/30 text-accent-primary hover:bg-accent-primary/20'
+                              : 'bg-bg-card border-border-color text-text-muted hover:text-text-primary hover:bg-bg-card-hover'
+                          }`}
+                          title={
+                            canShareWithPatient
+                              ? file.is_shared
+                                ? 'Visible para el paciente en su Portal. Clic para ocultar.'
+                                : 'Privado. Clic para compartir en el Portal del paciente.'
+                              : 'Sincronización con Portal disponible en Plan Enterprise. Clic para ver planes.'
+                          }
+                        >
+                          {canShareWithPatient ? (
+                            file.is_shared ? (
+                              <Eye className="w-4 h-4" />
+                            ) : (
+                              <EyeOff className="w-4 h-4" />
+                            )
+                          ) : (
+                            <div className="flex items-center gap-1">
+                              <Lock className="w-3.5 h-3.5 text-amber-500" />
+                              <EyeOff className="w-3.5 h-3.5 text-text-muted" />
+                            </div>
+                          )}
+                        </button>
                         <button
                           onClick={async () => {
                             const { data } = await supabase.storage
@@ -1678,13 +1766,14 @@ export default function PacienteFicha() {
                               alert('No se pudo generar el enlace de descarga.');
                             }
                           }}
-                          className="text-text-muted hover:text-accent-primary p-1"
+                          className="text-text-muted hover:text-accent-primary p-1.5 rounded-lg hover:bg-bg-card transition-colors cursor-pointer"
                           title="Descargar"
                         >
                           <FolderOpen className="w-4 h-4" />
                         </button>
                         <button 
                           onClick={async () => {
+                            if (!confirm(`¿Eliminar "${file.original_name}"?`)) return;
                             // Delete from storage
                             if (file.storage_path) {
                               await supabase.storage.from('clinical-vault').remove([file.storage_path]);
@@ -1694,7 +1783,7 @@ export default function PacienteFicha() {
                             if (delErr) alert(delErr.message);
                             else fetchFichaData();
                           }}
-                          className="text-text-muted hover:text-danger p-1"
+                          className="text-text-muted hover:text-danger p-1.5 rounded-lg hover:bg-bg-card transition-colors cursor-pointer"
                           title="Eliminar"
                         >
                           <Trash2 className="w-4 h-4" />
@@ -1890,7 +1979,8 @@ export default function PacienteFicha() {
               <button onClick={() => {
                 setIsAddFileModalOpen(false);
                 setUploadingFileObject(null);
-              }} className="text-text-secondary hover:text-text-primary">
+                setShareWithPatient(false);
+              }} className="text-text-secondary hover:text-text-primary cursor-pointer">
                 <X className="w-5 h-5" />
               </button>
             </div>
@@ -1922,6 +2012,54 @@ export default function PacienteFicha() {
                   className="w-full bg-bg-input border border-border-color rounded-lg px-3 py-2 text-sm text-text-primary focus:outline-none"
                 />
               </div>
+
+              {/* Portal Sharing Option with Plan-Level Gating */}
+              <div className={`p-3.5 rounded-xl border transition-all ${
+                canShareWithPatient 
+                  ? 'bg-bg-input/60 border-border-color' 
+                  : 'bg-amber-500/5 border-amber-500/20'
+              }`}>
+                {canShareWithPatient ? (
+                  <label className="flex items-start gap-3 cursor-pointer select-none">
+                    <input 
+                      type="checkbox"
+                      checked={shareWithPatient}
+                      onChange={(e) => setShareWithPatient(e.target.checked)}
+                      className="mt-0.5 w-4 h-4 rounded border-border-color text-accent-primary focus:ring-accent-primary cursor-pointer accent-accent-primary"
+                    />
+                    <div className="flex-1 space-y-0.5">
+                      <p className="text-xs font-semibold text-text-primary flex items-center gap-1.5">
+                        <Eye className="w-3.5 h-3.5 text-accent-primary" />
+                        <span>Compartir con el paciente en su Portal</span>
+                      </p>
+                      <p className="text-[10px] text-text-secondary">
+                        El archivo estará disponible de forma inmediata en la sección de recursos del portal del paciente.
+                      </p>
+                    </div>
+                  </label>
+                ) : (
+                  <div 
+                    onClick={() => router.push('/plan')}
+                    className="flex items-start justify-between gap-3 cursor-pointer group"
+                    title="Función disponible en Plan Enterprise. Clic para ver planes."
+                  >
+                    <div className="flex items-start gap-2.5 flex-1">
+                      <Lock className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
+                      <div className="space-y-0.5">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-semibold text-text-primary">Compartir en Portal del Paciente</span>
+                          <span className="text-[10px] font-bold text-amber-600 dark:text-amber-400 bg-amber-500/15 border border-amber-500/30 px-2 py-0.5 rounded-full group-hover:bg-amber-500/25 transition-colors">
+                            Plan Enterprise
+                          </span>
+                        </div>
+                        <p className="text-[10px] text-text-muted">
+                          La sincronización directa con el portal de pacientes requiere el plan Enterprise. Haz clic aquí para actualizar tu suscripción.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
             <div className="flex justify-end gap-3 px-6 py-4 border-t border-border-color bg-bg-input/40">
               <button 
@@ -1929,6 +2067,7 @@ export default function PacienteFicha() {
                 onClick={() => {
                   setIsAddFileModalOpen(false);
                   setUploadingFileObject(null);
+                  setShareWithPatient(false);
                 }}
                 className="px-4 py-2 border border-border-color hover:bg-bg-card-hover text-xs font-bold rounded-lg text-text-secondary transition-all cursor-pointer"
               >
@@ -1964,7 +2103,8 @@ export default function PacienteFicha() {
                         mime_type: uploadingFileObject.type || 'application/octet-stream',
                         category: fileCategory,
                         description: fileDescription.trim(),
-                        size_bytes: uploadingFileObject.size
+                        size_bytes: uploadingFileObject.size,
+                        is_shared: canShareWithPatient ? shareWithPatient : false
                       });
 
                     if (dbErr) throw dbErr;
@@ -1972,6 +2112,7 @@ export default function PacienteFicha() {
                     alert('Archivo subido con éxito.');
                     setIsAddFileModalOpen(false);
                     setUploadingFileObject(null);
+                    setShareWithPatient(false);
                     fetchFichaData();
                   } catch (err: any) {
                     alert('Error al subir archivo: ' + err.message);

@@ -7,6 +7,7 @@
 
 import React, { useState, useEffect } from 'react';
 import Head from 'next/head';
+import { useRouter } from 'next/router';
 import { 
   BookOpen, 
   FolderOpen, 
@@ -18,12 +19,21 @@ import {
   X, 
   HardDrive,
   AlertTriangle,
-  UploadCloud
+  UploadCloud,
+  Eye,
+  EyeOff,
+  Lock,
+  Globe,
+  Users,
+  User
 } from 'lucide-react';
 import { supabase } from '../lib/supabaseClient';
+import { hasFeature } from '../utils/planFeatures';
 
 interface VaultFile {
   id: string;
+  organization_id: string;
+  patient_id: string | null;
   original_name: string;
   saved_name: string;
   storage_path: string;
@@ -31,7 +41,13 @@ interface VaultFile {
   category: string;
   description: string | null;
   size_bytes: number;
+  is_shared: boolean;
   created_at: string;
+  patient?: {
+    id: string;
+    full_name: string;
+    rut_patient?: string;
+  } | null;
 }
 
 interface ResourceCategory {
@@ -39,10 +55,23 @@ interface ResourceCategory {
   name: string;
 }
 
+interface PatientOption {
+  id: string;
+  full_name: string;
+  rut_patient?: string;
+}
+
 export default function Biblioteca() {
+  const router = useRouter();
+  const [activeTab, setActiveTab] = useState<'global' | 'pacientes'>('global');
   const [resources, setResources] = useState<VaultFile[]>([]);
+  const [patientResources, setPatientResources] = useState<VaultFile[]>([]);
   const [categories, setCategories] = useState<ResourceCategory[]>([]);
+  const [patients, setPatients] = useState<PatientOption[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingPatients, setLoadingPatients] = useState(false);
+  const [organization, setOrganization] = useState<any>(null);
+  const [currentPlan, setCurrentPlan] = useState<string>('Starter');
   
   // Storage usage states
   const [vaultSize, setVaultSize] = useState<number>(0);
@@ -59,23 +88,83 @@ export default function Biblioteca() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [uploadDescription, setUploadDescription] = useState('');
   const [uploadCategory, setUploadCategory] = useState('');
+  const [selectedPatientId, setSelectedPatientId] = useState('');
   const [uploading, setUploading] = useState(false);
+
+  const canShareWithPatient = hasFeature(currentPlan, 'portal');
+
+  const fetchOrgAndPlan = async () => {
+    try {
+      const tenantId = localStorage.getItem('active-tenant-id') || '';
+      if (!tenantId) return;
+      const { data: orgData } = await supabase
+        .from('organizations')
+        .select('id, name, current_plan')
+        .eq('id', tenantId)
+        .maybeSingle();
+      if (orgData) {
+        setOrganization(orgData);
+        setCurrentPlan(orgData.current_plan || 'Starter');
+      }
+    } catch (err) {
+      console.error('Error fetching org plan:', err);
+    }
+  };
 
   const fetchGlobalResources = async () => {
     setLoading(true);
     try {
       // Fetch files where patient_id is null (global workspace resources)
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from('files_vault')
         .select('*')
         .is('patient_id', null)
         .order('created_at', { ascending: false });
 
-      if (data) setResources(data as VaultFile[]);
+      if (!error && data) {
+        setResources(data as VaultFile[]);
+      }
     } catch (err) {
-      console.error(err);
+      console.error('Error fetching global resources:', err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchPatientResources = async () => {
+    setLoadingPatients(true);
+    try {
+      // Fetch files where patient_id is NOT null (patient-assigned resources)
+      const { data, error } = await supabase
+        .from('files_vault')
+        .select('*, patient:patient_id (id, full_name, rut_patient)')
+        .not('patient_id', 'is', null)
+        .order('created_at', { ascending: false });
+
+      if (!error && data) {
+        setPatientResources(data as VaultFile[]);
+      }
+    } catch (err) {
+      console.error('Error fetching patient resources:', err);
+    } finally {
+      setLoadingPatients(false);
+    }
+  };
+
+  const fetchPatientsList = async () => {
+    try {
+      const tenantId = localStorage.getItem('active-tenant-id') || '';
+      if (!tenantId) return;
+      const { data, error } = await supabase
+        .from('patients')
+        .select('id, full_name, rut_patient')
+        .eq('organization_id', tenantId)
+        .order('full_name', { ascending: true });
+      if (!error && data) {
+        setPatients(data);
+      }
+    } catch (err) {
+      console.error('Error fetching patients list:', err);
     }
   };
 
@@ -108,8 +197,11 @@ export default function Biblioteca() {
   };
 
   useEffect(() => {
+    fetchOrgAndPlan();
     fetchGlobalResources();
+    fetchPatientResources();
     fetchCategories();
+    fetchPatientsList();
     fetchVaultSize();
   }, []);
 
@@ -168,6 +260,7 @@ export default function Biblioteca() {
       setSelectedFile(file);
       setUploadCategory(categories[0]?.name || 'Recurso General');
       setUploadDescription('');
+      setSelectedPatientId('');
       setIsUploadModalOpen(true);
       e.target.value = '';
     }
@@ -179,8 +272,14 @@ export default function Biblioteca() {
     
     setUploading(true);
     const tenantId = localStorage.getItem('active-tenant-id') || '';
-    const savedName = `lib_${Date.now()}_${selectedFile.name.replace(/\s/g, '_')}`;
-    const storagePath = `${tenantId}/biblioteca/${savedName}`;
+    const isPatientAssigned = Boolean(selectedPatientId && canShareWithPatient);
+    const patientIdToSave = isPatientAssigned ? selectedPatientId : null;
+    const savedName = isPatientAssigned
+      ? `patient_${Date.now()}_${selectedFile.name.replace(/\s/g, '_')}`
+      : `lib_${Date.now()}_${selectedFile.name.replace(/\s/g, '_')}`;
+    const storagePath = isPatientAssigned
+      ? `${tenantId}/${selectedPatientId}/${savedName}`
+      : `${tenantId}/biblioteca/${savedName}`;
 
     try {
       // 1. Upload to Supabase Storage
@@ -190,32 +289,62 @@ export default function Biblioteca() {
 
       if (uploadErr) throw uploadErr;
 
-      // 2. Register in files_vault table (no patient_id = global resource)
+      // 2. Register in files_vault table
+      // Per R3: When patient is assigned, save patient_id and is_shared = true. Global resources are also is_shared = true.
       const { error: dbErr } = await supabase
         .from('files_vault')
         .insert({
           organization_id: tenantId,
-          patient_id: null,
+          patient_id: patientIdToSave,
           original_name: selectedFile.name,
           saved_name: savedName,
           storage_path: storagePath,
           mime_type: selectedFile.type || 'application/octet-stream',
           category: uploadCategory,
           description: uploadDescription.trim(),
-          size_bytes: selectedFile.size
+          size_bytes: selectedFile.size,
+          is_shared: true
         });
 
       if (dbErr) throw dbErr;
 
       setIsUploadModalOpen(false);
       setSelectedFile(null);
+      setSelectedPatientId('');
       fetchGlobalResources();
+      fetchPatientResources();
       fetchVaultSize();
       alert('Recurso subido exitosamente.');
     } catch (err: any) {
       alert('Error en la subida: ' + err.message);
     } finally {
       setUploading(false);
+    }
+  };
+
+  const handleToggleFileShare = async (file: VaultFile) => {
+    if (!canShareWithPatient) {
+      router.push('/plan');
+      return;
+    }
+    try {
+      const nextShared = !file.is_shared;
+      const { error: updateErr } = await supabase
+        .from('files_vault')
+        .update({ is_shared: nextShared })
+        .eq('id', file.id);
+
+      if (updateErr) throw updateErr;
+
+      setPatientResources((prev) =>
+        prev.map((f) => (f.id === file.id ? { ...f, is_shared: nextShared } : f))
+      );
+      setResources((prev) =>
+        prev.map((f) => (f.id === file.id ? { ...f, is_shared: nextShared } : f))
+      );
+    } catch (err: any) {
+      console.error('Error toggling file share:', err);
+      alert('Error al actualizar visibilidad: ' + (err.message || 'Error desconocido'));
     }
   };
 
@@ -244,6 +373,7 @@ export default function Biblioteca() {
       if (error) throw error;
       
       fetchGlobalResources();
+      fetchPatientResources();
       fetchVaultSize();
     } catch (err: any) {
       alert(err.message);
@@ -275,7 +405,7 @@ export default function Biblioteca() {
               <BookOpen className="w-6 h-6 text-accent-primary" />
               <span>Biblioteca de Recursos</span>
             </h1>
-            <p className="text-text-secondary text-sm">Repositorio global indexado por categorías de material de apoyo y guías clínicas.</p>
+            <p className="text-text-secondary text-sm">Repositorio global y asignaciones a pacientes con control de visibilidad en Portal.</p>
           </div>
           
           <div className="flex items-center gap-3 self-end sm:self-auto">
@@ -325,59 +455,193 @@ export default function Biblioteca() {
           )}
         </div>
 
-        {/* Main List */}
-        <div className="bg-bg-card border border-border-color rounded-2xl p-6">
-          {loading ? (
-            <div className="py-20 text-center text-text-muted text-sm">Cargando biblioteca...</div>
-          ) : resources.length === 0 ? (
-            <div className="py-20 text-center text-text-muted text-sm border border-dashed border-border-color rounded-xl bg-bg-primary/20 space-y-2">
-              <FolderOpen className="w-8 h-8 text-text-muted mx-auto" />
-              <p className="font-semibold text-text-secondary">La biblioteca está vacía.</p>
-              <p className="text-xs text-text-muted">Presione el botón superior para subir un recurso clínico.</p>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {resources.map((res) => (
-                <div key={res.id} className="bg-bg-input border border-border-color p-4 rounded-xl flex items-start justify-between gap-4 hover:border-border-focus transition-colors">
-                  <div className="space-y-2 flex-1 min-w-0">
-                    <span className="bg-accent-primary/10 text-accent-primary border border-accent-primary/20 px-2 py-0.5 rounded text-[10px] font-bold">
-                      {res.category}
-                    </span>
-                    <div className="space-y-1">
-                      <p className="text-sm font-semibold text-text-primary flex items-center gap-2 truncate">
-                        <FileText className="w-4 h-4 text-accent-primary shrink-0" />
-                        <span className="truncate" title={res.original_name}>{res.original_name}</span>
-                      </p>
-                      {res.description && (
-                        <p className="text-xs text-text-secondary line-clamp-2 leading-relaxed">{res.description}</p>
-                      )}
-                      <p className="text-[10px] text-text-muted">
-                        {res.mime_type} • {formatBytes(res.size_bytes)}
-                      </p>
+        {/* View Selection Tabs */}
+        <div className="flex items-center gap-2 border-b border-border-color pb-1">
+          <button
+            onClick={() => setActiveTab('global')}
+            className={`px-4 py-2 text-xs font-bold rounded-lg flex items-center gap-2 transition-all cursor-pointer ${
+              activeTab === 'global'
+                ? 'bg-accent-primary text-bg-primary shadow-sm'
+                : 'text-text-secondary hover:text-text-primary hover:bg-bg-input'
+            }`}
+          >
+            <Globe className="w-4 h-4" />
+            <span>Recursos Globales ({resources.length})</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('pacientes')}
+            className={`px-4 py-2 text-xs font-bold rounded-lg flex items-center gap-2 transition-all cursor-pointer ${
+              activeTab === 'pacientes'
+                ? 'bg-accent-primary text-bg-primary shadow-sm'
+                : 'text-text-secondary hover:text-text-primary hover:bg-bg-input'
+            }`}
+          >
+            <Users className="w-4 h-4" />
+            <span>Asignados a Pacientes ({patientResources.length})</span>
+          </button>
+        </div>
+
+        {/* Main List: Global Resources */}
+        {activeTab === 'global' && (
+          <div className="bg-bg-card border border-border-color rounded-2xl p-6">
+            {loading ? (
+              <div className="py-20 text-center text-text-muted text-sm">Cargando biblioteca global...</div>
+            ) : resources.length === 0 ? (
+              <div className="py-20 text-center text-text-muted text-sm border border-dashed border-border-color rounded-xl bg-bg-primary/20 space-y-2">
+                <FolderOpen className="w-8 h-8 text-text-muted mx-auto" />
+                <p className="font-semibold text-text-secondary">La biblioteca global está vacía.</p>
+                <p className="text-xs text-text-muted">Presione el botón superior para subir un recurso clínico global.</p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {resources.map((res) => (
+                  <div key={res.id} className="bg-bg-input border border-border-color p-4 rounded-xl flex items-start justify-between gap-4 hover:border-border-focus transition-colors">
+                    <div className="space-y-2 flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="bg-accent-primary/10 text-accent-primary border border-accent-primary/20 px-2 py-0.5 rounded text-[10px] font-bold">
+                          {res.category}
+                        </span>
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-bg-card text-text-muted border border-border-color">
+                          <Globe className="w-3 h-3" />
+                          <span>Global</span>
+                        </span>
+                      </div>
+                      <div className="space-y-1">
+                        <p className="text-sm font-semibold text-text-primary flex items-center gap-2 truncate">
+                          <FileText className="w-4 h-4 text-accent-primary shrink-0" />
+                          <span className="truncate" title={res.original_name}>{res.original_name}</span>
+                        </p>
+                        {res.description && (
+                          <p className="text-xs text-text-secondary line-clamp-2 leading-relaxed">{res.description}</p>
+                        )}
+                        <p className="text-[10px] text-text-muted">
+                          {res.mime_type} • {formatBytes(res.size_bytes)}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-1 shrink-0">
+                      <button 
+                        onClick={() => handleDownload(res.storage_path)}
+                        className="bg-bg-card hover:bg-bg-card-hover p-2 rounded-lg text-text-secondary hover:text-accent-primary border border-border-color transition-all cursor-pointer"
+                        title="Descargar"
+                      >
+                        <Download className="w-4 h-4" />
+                      </button>
+                      <button 
+                        onClick={() => handleDelete(res)}
+                        className="bg-bg-card hover:bg-bg-card-hover p-2 rounded-lg text-text-secondary hover:text-danger border border-border-color transition-all cursor-pointer"
+                        title="Eliminar"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
                     </div>
                   </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
 
-                  <div className="flex items-center gap-1 shrink-0">
-                    <button 
-                      onClick={() => handleDownload(res.storage_path)}
-                      className="bg-bg-card hover:bg-bg-card-hover p-2 rounded-lg text-text-secondary hover:text-accent-primary border border-border-color transition-all cursor-pointer"
-                      title="Descargar"
-                    >
-                      <Download className="w-4 h-4" />
-                    </button>
-                    <button 
-                      onClick={() => handleDelete(res)}
-                      className="bg-bg-card hover:bg-bg-card-hover p-2 rounded-lg text-text-secondary hover:text-danger border border-border-color transition-all cursor-pointer"
-                      title="Eliminar"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
+        {/* Main List: Patient Assigned Resources */}
+        {activeTab === 'pacientes' && (
+          <div className="bg-bg-card border border-border-color rounded-2xl p-6">
+            {loadingPatients ? (
+              <div className="py-20 text-center text-text-muted text-sm">Cargando archivos asignados a pacientes...</div>
+            ) : patientResources.length === 0 ? (
+              <div className="py-20 text-center text-text-muted text-sm border border-dashed border-border-color rounded-xl bg-bg-primary/20 space-y-2">
+                <Users className="w-8 h-8 text-text-muted mx-auto" />
+                <p className="font-semibold text-text-secondary">No hay archivos asignados a pacientes específicos.</p>
+                <p className="text-xs text-text-muted">Al subir un recurso puedes vincularlo directamente al portal de un paciente.</p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {patientResources.map((res) => (
+                  <div key={res.id} className="bg-bg-input border border-border-color p-4 rounded-xl flex items-start justify-between gap-4 hover:border-border-focus transition-colors">
+                    <div className="space-y-2 flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="bg-accent-primary/10 text-accent-primary border border-accent-primary/20 px-2 py-0.5 rounded text-[10px] font-bold">
+                          {res.category}
+                        </span>
+                        {res.patient && (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-accent-primary/15 text-accent-primary border border-accent-primary/30">
+                            <User className="w-3 h-3" />
+                            <span>{res.patient.full_name}</span>
+                          </span>
+                        )}
+                        {res.is_shared ? (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 shrink-0">
+                            <Eye className="w-3 h-3" />
+                            <span>Visible en Portal</span>
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-bg-card text-text-muted border border-border-color shrink-0">
+                            <EyeOff className="w-3 h-3" />
+                            <span>Privado</span>
+                          </span>
+                        )}
+                      </div>
+                      <div className="space-y-1">
+                        <p className="text-sm font-semibold text-text-primary flex items-center gap-2 truncate">
+                          <FileText className="w-4 h-4 text-accent-primary shrink-0" />
+                          <span className="truncate" title={res.original_name}>{res.original_name}</span>
+                        </p>
+                        {res.description && (
+                          <p className="text-xs text-text-secondary line-clamp-2 leading-relaxed">{res.description}</p>
+                        )}
+                        <p className="text-[10px] text-text-muted">
+                          {res.mime_type} • {formatBytes(res.size_bytes)}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-1 shrink-0">
+                      <button
+                        onClick={() => handleToggleFileShare(res)}
+                        className={`p-2 rounded-lg border transition-all cursor-pointer flex items-center gap-1 ${
+                          res.is_shared
+                            ? 'bg-accent-primary/10 border-accent-primary/30 text-accent-primary hover:bg-accent-primary/20'
+                            : 'bg-bg-card border-border-color text-text-muted hover:text-text-primary hover:bg-bg-card-hover'
+                        }`}
+                        title={
+                          canShareWithPatient
+                            ? res.is_shared
+                              ? 'Visible para el paciente en su Portal. Clic para ocultar.'
+                              : 'Privado. Clic para compartir en el Portal del paciente.'
+                            : 'Sincronización con Portal disponible en Plan Enterprise. Clic para ver planes.'
+                        }
+                      >
+                        {canShareWithPatient ? (
+                          res.is_shared ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />
+                        ) : (
+                          <div className="flex items-center gap-1">
+                            <Lock className="w-3.5 h-3.5 text-amber-500" />
+                            <EyeOff className="w-3.5 h-3.5 text-text-muted" />
+                          </div>
+                        )}
+                      </button>
+                      <button 
+                        onClick={() => handleDownload(res.storage_path)}
+                        className="bg-bg-card hover:bg-bg-card-hover p-2 rounded-lg text-text-secondary hover:text-accent-primary border border-border-color transition-all cursor-pointer"
+                        title="Descargar"
+                      >
+                        <Download className="w-4 h-4" />
+                      </button>
+                      <button 
+                        onClick={() => handleDelete(res)}
+                        className="bg-bg-card hover:bg-bg-card-hover p-2 rounded-lg text-text-secondary hover:text-danger border border-border-color transition-all cursor-pointer"
+                        title="Eliminar"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
                   </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Modal: Categorías de Recursos */}
         {isCategoryModalOpen && (
@@ -462,6 +726,7 @@ export default function Biblioteca() {
                   onClick={() => {
                     setIsUploadModalOpen(false);
                     setSelectedFile(null);
+                    setSelectedPatientId('');
                   }}
                   className="text-text-muted hover:text-text-primary p-1 rounded-lg transition-colors cursor-pointer"
                 >
@@ -480,13 +745,70 @@ export default function Biblioteca() {
                   <select 
                     value={uploadCategory}
                     onChange={(e) => setUploadCategory(e.target.value)}
-                    className="w-full bg-bg-input border border-border-color px-3 py-2 rounded-lg text-xs focus:ring-1 focus:ring-accent-primary focus:outline-none text-text-primary"
+                    className="w-full bg-bg-input border border-border-color px-3 py-2 rounded-lg text-xs focus:ring-1 focus:ring-accent-primary focus:outline-none text-text-primary cursor-pointer"
                   >
                     <option value="Recurso General">Recurso General</option>
                     {categories.map((cat) => (
                       <option key={cat.id} value={cat.name}>{cat.name}</option>
                     ))}
                   </select>
+                </div>
+
+                {/* Patient Selector with Enterprise Plan Gate */}
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <label className="text-[10px] font-bold text-text-secondary uppercase">
+                      Asignar a Paciente (Portal de Pacientes)
+                    </label>
+                    {!canShareWithPatient && (
+                      <span 
+                        onClick={() => router.push('/plan')}
+                        className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-600 dark:text-amber-400 bg-amber-500/15 border border-amber-500/30 px-2 py-0.5 rounded-full cursor-pointer hover:bg-amber-500/25 transition-colors"
+                      >
+                        <Lock className="w-3 h-3 text-amber-500" />
+                        <span>Plan Enterprise</span>
+                      </span>
+                    )}
+                  </div>
+                  
+                  {canShareWithPatient ? (
+                    <select
+                      value={selectedPatientId}
+                      onChange={(e) => setSelectedPatientId(e.target.value)}
+                      className="w-full bg-bg-input border border-border-color px-3 py-2 rounded-lg text-xs focus:ring-1 focus:ring-accent-primary focus:outline-none text-text-primary cursor-pointer"
+                    >
+                      <option value="">Recurso Global (Toda la Clínica / No Asignado)</option>
+                      {patients.map((pat) => (
+                        <option key={pat.id} value={pat.id}>
+                          {pat.full_name} {pat.rut_patient ? `(${pat.rut_patient})` : ''}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <div
+                      onClick={() => router.push('/plan')}
+                      className="p-3 bg-amber-500/5 border border-amber-500/25 rounded-xl flex items-start gap-2.5 cursor-pointer hover:bg-amber-500/10 transition-colors group"
+                      title="Requiere Plan Enterprise. Clic para ver planes."
+                    >
+                      <Lock className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
+                      <div className="text-xs space-y-0.5 flex-1">
+                        <p className="font-semibold text-text-primary flex items-center justify-between">
+                          <span>Asignación a Portal de Pacientes</span>
+                          <span className="text-[10px] text-amber-600 dark:text-amber-400 font-bold underline">Actualizar</span>
+                        </p>
+                        <p className="text-[10px] text-text-muted">
+                          Asignar archivos directamente a pacientes individuales en su portal requiere el Plan Enterprise.
+                        </p>
+                      </div>
+                    </div>
+                  )}
+
+                  {canShareWithPatient && selectedPatientId && (
+                    <p className="text-[10px] text-accent-primary flex items-center gap-1 font-medium pt-0.5">
+                      <Eye className="w-3 h-3" />
+                      <span>El archivo se sincronizará automáticamente en el Portal del paciente seleccionado.</span>
+                    </p>
+                  )}
                 </div>
 
                 <div className="space-y-1.5">
@@ -506,6 +828,7 @@ export default function Biblioteca() {
                     onClick={() => {
                       setIsUploadModalOpen(false);
                       setSelectedFile(null);
+                      setSelectedPatientId('');
                     }}
                     className="px-4 py-2 border border-border-color text-text-primary hover:bg-bg-input rounded-lg text-xs font-bold transition-all cursor-pointer"
                     disabled={uploading}
