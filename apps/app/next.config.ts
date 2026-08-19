@@ -9,6 +9,10 @@ const nextConfig: NextConfig = {
         source: "/api/v1/booking/articles/:slug",
         destination: "/api/v1/booking/articles?slug=:slug",
       },
+      {
+        source: "/api/v1/integrations/articles/:slug",
+        destination: "/api/v1/integrations/articles?slug=:slug",
+      },
     ];
   },
 };
